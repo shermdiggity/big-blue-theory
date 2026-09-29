@@ -1,8 +1,18 @@
 # Ticket 8 worksheet: which paid numbers do we actually use?
 
-Click through the **Week 3 (TEN @ NYG)** game in SūmerPass and NFL Pro. For every per-game number
-you'd actually put in a post, fill in a row. This list becomes the final schema
-(`agent/paid_extract.schema.json` is a **draft v0** until this is done).
+**How this gets filled:** Claude in Chrome runs the mission in `agent/EXPLORE.md` against the
+logged-in sites, and its field map (section A) replaces the tables below. The sample values
+(section B) go to `private/`, never here. Until then, `agent/paid_extract.schema.json` is a
+**draft v0**.
+
+What public info says to expect (to be confirmed by the exploration):
+- **SūmerPass**: team offense/defense tables, personnel- and formation-tendency tables, player
+  tables, all filterable by coverage, personnel, formation and game state. Charted in-house
+  (pressure, routes, coverage), updated about 2 hours after each slate. SūmerLive charts games
+  live. Open question: can every table filter to a **single game**?
+- **NFL Pro (NFL+ Premium)**: 95+ Next Gen Stats metrics, Game Pages (preview and recap
+  insights), Film Room with All-22 plus filters and saved playlists. NGS run-concept model
+  (16 labels, grouped into man/zone/gap).
 
 Don't paste any actual numbers here. This file is public. Just write down *where* each number lives.
 
