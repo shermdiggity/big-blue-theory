@@ -51,7 +51,8 @@ python -m bbt opponent 4     # next opponent's tendencies, most unusual first
 python -m bbt watchfor 4 --metric play_action --under 0.18 --text "ARI stays allergic to play action"
 python -m bbt grade 4        # grade it after the game
 python -m bbt notes 3        # check your Sunday notes against the data
-python -m bbt eye            # season "my eye vs the data" score
+python -m bbt notes 3 --source skinner   # same, for someone else's takes (backtesting)
+python -m bbt eye            # season "my eye vs the data" score, per source
 python -m bbt audit          # confirm nothing private is tracked (CI runs this too)
 pytest -q
 ```

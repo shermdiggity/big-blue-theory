@@ -4,8 +4,8 @@
   week N               build the game packet for week N (private/packets/)
   run N                refresh + check paid extract + packet, timed (ticket 16)
   check N              validate the paid-data extract for week N
-  notes N              check your Sunday notes for week N against the data
-  eye                  season eye score from your graded notes
+  notes N [--source X] check notes for week N against the data (yours, or e.g. --source skinner)
+  eye                  season eye score per source from graded notes
   opponent N           tendencies for the week-N opponent (using games through N-1)
   watchfor N ...       log the week-N prediction in scorecard.csv
   grade N              grade the week-N prediction
@@ -71,7 +71,7 @@ def cmd_run(a):
 
 def cmd_notes(a):
     from bbt import data, notes
-    path = config.NOTES_DIR / f"{config.week_tag(a.week)}.md"
+    path = notes.notes_path(a.week, a.source)
     if not path.exists():
         sys.exit(f"No notes at {path}. Format: who | what | evidence")
     game = data.game_plays(data.game_id_for(a.week))
@@ -82,7 +82,7 @@ def cmd_notes(a):
             print(f"   {ev}: {val}")
         if c.needs_paid:
             print(f"   needs Sūmer/film: {', '.join(c.needs_paid)}")
-    v, q = notes.write_verdicts(claims, a.week)
+    v, q = notes.write_verdicts(claims, a.week, a.source)
     print(f"\nFill in verdicts: {v}\nSūmerBrain questions: {q}")
 
 
@@ -167,7 +167,10 @@ def main(argv=None):
     sub.add_parser("refresh").set_defaults(fn=cmd_refresh)
     s = sub.add_parser("week"); s.add_argument("week", type=int)
     s.add_argument("--no-charts", action="store_true"); s.set_defaults(fn=cmd_week)
-    for name, fn in [("run", cmd_run), ("check", cmd_check), ("notes", cmd_notes),
+    s = sub.add_parser("notes"); s.add_argument("week", type=int)
+    s.add_argument("--source", default="me", help="whose notes: me (default) or e.g. skinner")
+    s.set_defaults(fn=cmd_notes)
+    for name, fn in [("run", cmd_run), ("check", cmd_check),
                      ("opponent", cmd_opponent), ("grade", cmd_grade)]:
         s = sub.add_parser(name); s.add_argument("week", type=int); s.set_defaults(fn=fn)
     s = sub.add_parser("watchfor"); s.add_argument("week", type=int)

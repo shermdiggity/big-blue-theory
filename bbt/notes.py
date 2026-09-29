@@ -10,6 +10,12 @@ Note format, one claim per line (lines starting with # are ignored):
 
 `type` is players / scheme / decisions. If you leave it off it's guessed from `who`.
 
+Notes can come from other people too, for backtesting or comparison:
+    private/notes/2026_wk03.md           you (source "me")
+    private/notes/2026_wk03_skinner.md   source "skinner"
+Keep the original take and its link on a `#` comment line above each claim, so every
+claim can be traced back to what was actually said.
+
 `bbt notes N` writes private/notes/<week>_verdicts.csv with the free-data evidence for each
 claim, plus the SūmerBrain questions for anything free data can't answer. You fill in the
 `verdict` column (supported / contradicted / mixed / can't check). `bbt eye` then scores your
@@ -260,10 +266,15 @@ def sumerbrain_questions(claims: list[Claim], game_label: str) -> list[dict]:
     return qs
 
 
-def write_verdicts(claims: list[Claim], week: int) -> tuple[str, str]:
+def notes_path(week: int, source: str = "me"):
+    tag = config.week_tag(week)
+    return config.NOTES_DIR / (f"{tag}.md" if source == "me" else f"{tag}_{source}.md")
+
+
+def write_verdicts(claims: list[Claim], week: int, source: str = "me") -> tuple[str, str]:
     """Write the verdicts CSV (keeps any verdicts you already filled in) + SūmerBrain questions."""
     config.NOTES_DIR.mkdir(parents=True, exist_ok=True)
-    tag = config.week_tag(week)
+    tag = config.week_tag(week) + ("" if source == "me" else f"_{source}")
     path = config.NOTES_DIR / f"{tag}_verdicts.csv"
     existing = {}
     if path.exists():
@@ -287,32 +298,32 @@ def write_verdicts(claims: list[Claim], week: int) -> tuple[str, str]:
                 "comment": old.get("comment", ""),
             })
     qpath = config.NOTES_DIR / f"{tag}_sumerbrain_questions.json"
-    qpath.write_text(json.dumps(sumerbrain_questions(claims, f"week {week}"), indent=2))
+    qpath.write_text(json.dumps(sumerbrain_questions(claims, f"week {week} ({config.SEASON})"), indent=2))
     return str(path), str(qpath)
 
 
 def eye_score() -> pl.DataFrame:
-    """Share of checkable notes the data supported, by claim type, across every graded week.
+    """Share of checkable notes the data supported, per source and claim type, all graded weeks.
 
     'mixed' counts as half. "can't check" and blanks are left out of the denominator.
     """
     rows = []
     for p in sorted(config.NOTES_DIR.glob("*_verdicts.csv")):
+        # 2026_wk03_verdicts.csv -> me ; 2026_wk03_skinner_verdicts.csv -> skinner
+        middle = p.name[len("2026_wk03"):-len("_verdicts.csv")].strip("_")
         with p.open() as f:
             for r in csv.DictReader(f):
                 v = (r.get("verdict") or "").strip().lower()
                 if v in ("supported", "contradicted", "mixed"):
-                    rows.append({"week": p.name[:9], "type": r["type"], "verdict": v})
+                    rows.append({"source": middle or "me", "week": p.name[:9], "type": r["type"], "verdict": v})
     if not rows:
         return pl.DataFrame()
     df = pl.DataFrame(rows).with_columns(
         pl.col("verdict").replace_strict({"supported": 1.0, "mixed": 0.5, "contradicted": 0.0}).alias("score"))
-    by_type = df.group_by("type").agg(pl.len().alias("checked"),
-                                      (pl.col("verdict") == "supported").sum().alias("supported"),
-                                      (pl.col("verdict") == "contradicted").sum().alias("contradicted"),
-                                      pl.col("score").mean().alias("eye_score"))
-    total = df.select(pl.lit("ALL").alias("type"), pl.len().alias("checked"),
-                      (pl.col("verdict") == "supported").sum().alias("supported"),
-                      (pl.col("verdict") == "contradicted").sum().alias("contradicted"),
-                      pl.col("score").mean().alias("eye_score"))
-    return pl.concat([by_type.sort("type"), total])
+    aggs = [pl.len().alias("checked"),
+            (pl.col("verdict") == "supported").sum().alias("supported"),
+            (pl.col("verdict") == "contradicted").sum().alias("contradicted"),
+            pl.col("score").mean().alias("eye_score")]
+    by_type = df.group_by("source", "type").agg(aggs)
+    total = df.group_by("source").agg(aggs).with_columns(pl.lit("ALL").alias("type")).select(by_type.columns)
+    return pl.concat([by_type, total]).sort("source", pl.col("type") == "ALL", "type")
