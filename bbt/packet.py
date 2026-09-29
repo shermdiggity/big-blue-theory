@@ -95,6 +95,23 @@ def _paid_section(ext: dict, team: str) -> str:
         if row:
             out.append(f"\n### {title}\n\n" + md_table(pl.DataFrame(
                 [{"stat": k, "value": str(v)} for k, v in row.items()])))
+    np_ = ext.get("nfl_pro") or {}
+    for group, rows in (np_.get("game_stats") or {}).items():
+        if rows:
+            df = pl.DataFrame([{k: (None if v is None else str(v)) for k, v in r.items()} for r in rows],
+                              infer_schema_length=None)
+            out.append(f"\n### NFL Pro game stats: {group}\n\n" + md_table(df))
+    for key in ("ngs_team_defense", "ngs_team_offense"):
+        for view, row in (np_.get(key) or {}).items():
+            if row:
+                out.append(f"\n### NGS {key.replace('ngs_', '').replace('_', ' ')}: {view.replace('_', ' ')}\n\n"
+                           + md_table(pl.DataFrame([{"stat": k, "value": str(v)} for k, v in row.items()])))
+    if np_.get("personnel"):
+        out.append("\n### NFL Pro personnel (Play By Play counts)\n\n" + md_table(pl.DataFrame(np_["personnel"])))
+    if np_.get("film_room"):
+        out.append("\n**Film Room counts:** " + ", ".join(f"{k} {v}" for k, v in np_["film_room"].items()) + "\n")
+    for card in np_.get("insights") or []:
+        out.append(f"\n> {card}\n")
     for pos, rows in (s.get("players") or {}).items():
         if rows:
             df = pl.DataFrame([{k: (None if v is None else str(v)) for k, v in r.items()} for r in rows],
@@ -220,6 +237,9 @@ def build(week: int, team: str = config.TEAM, make_charts: bool = True) -> str:
         w("```\n" + rep.render() + "\n```\n")
         ext = paid.load(week)
         w(_paid_section(ext, team))
+        xs = paid.cross_source(ext)
+        if xs:
+            w("\n### Sūmer vs NFL Pro (same thing, two charters)\n\n" + md_table(pl.DataFrame(xs)))
         w("\n<details><summary>Raw extract</summary>\n\n```json\n" + json.dumps(
             {k: ext.get(k) for k in ("sumer", "nfl_pro", "sumerbrain", "missing_fields")}, indent=1)
           + "\n```\n</details>\n")

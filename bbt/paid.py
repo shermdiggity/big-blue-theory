@@ -29,7 +29,8 @@ from bbt import config
 REQUIRED = ["schema_version", "season", "week", "game_id", "team", "opponent", "extracted_at",
             "sources", "sumer", "missing_fields", "raw_text_file"]
 PCT_SUM_TOLERANCE = 2.0
-SHARE_TOLERANCE = 1.5   # percentage points between a split's share % and its counts
+SHARE_TOLERANCE = 1.5
+NUMERIC_STR = re.compile(r"^[-−+]?\d[\d,]*(?:\.\d+)?\s*(?:%|sec|s|yds)?$")   # percentage points between a split's share % and its counts
 
 
 @dataclass
@@ -177,6 +178,8 @@ def check(extract: dict, raw_text: str | None, week: int, game_id: str,
 
     if free:
         _free_checks(extract, free, totals, r)
+    if extract.get("nfl_pro"):
+        _nfl_pro_checks(extract["nfl_pro"], r)
 
     if raw_text is None:
         r.errors.append("raw page text file not found. Can't verify any number")
@@ -184,6 +187,8 @@ def check(extract: dict, raw_text: str | None, week: int, game_id: str,
         text = raw_text.replace(",", "")
         text_numbers = set(re.findall(r"[-−]?\d+(?:\.\d+)?", text))
         for path, v in leaves:
+            if isinstance(v, str) and NUMERIC_STR.match(v.strip()):
+                v = _num(v)  # verbatim "12.3%", "1.23 sec", "-4.5%"
             if isinstance(v, bool) or not isinstance(v, (int, float)):
                 continue
             if path in shots:
@@ -227,6 +232,75 @@ def _free_checks(extract: dict, free: FreeCounts, totals: dict, r: Report) -> No
                                ("opp", free.sacks_made, "NYG sacks made")):
         rows = (((gp.get(side) or {}).get("passing") or {}).get("pressure")) or []
         warn_if(f"{label} (Pressure split)", _total(rows, "sacks"), freev, tol=0)
+
+
+def _num(v):
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        return float(v)
+    if isinstance(v, str):
+        m = re.search(r"[-−]?\d+(?:\.\d+)?", v.replace(",", ""))
+        return float(m.group().replace("−", "-")) if m else None
+    return None
+
+
+def _nfl_pro_checks(np_: dict, r: Report) -> None:
+    """Internal consistency inside NFL Pro."""
+    film = np_.get("film_room") or {}
+    passing = ((np_.get("game_stats") or {}).get("passing")) or []
+    qbp = [_num(row.get("QBP")) for row in passing if _num(row.get("QBP")) is not None]
+    if film.get("pressure_plays") is not None and qbp and abs(sum(qbp) - film["pressure_plays"]) > 0:
+        r.warnings.append(f"NFL Pro: Film Room pressure plays {film['pressure_plays']} != sum of QBP "
+                          f"on the Stats tab {sum(qbp):.0f}")
+    by_team: dict[str, dict] = {}
+    for row in np_.get("personnel") or []:
+        by_team.setdefault(row["team"], {})[row["personnel"]] = row.get("plays")
+    for team, d in by_team.items():
+        total = d.get("ALL")
+        parts = [v for k, v in d.items() if k != "ALL" and v is not None]
+        if total is not None and parts and abs(sum(parts) - total) > 1:
+            r.warnings.append(f"NFL Pro personnel for {team}: groupings sum to {sum(parts)} but ALL = {total}")
+
+
+# Same idea measured by both paid sources: (label, sumer path, nfl_pro path). Paths are
+# tuples into the extract; the last element of a Sūmer/NFL Pro row path is the column label.
+CROSS = [
+    ("NYG defense blitz rate", ("sumer", "teams_defense", "Blitz %"),
+     ("nfl_pro", "ngs_team_defense", "pass_defense", "Blitz %")),
+    ("NYG defense pressure rate", ("sumer", "teams_defense", "Pressure %"),
+     ("nfl_pro", "ngs_team_defense", "pass_defense", "QBP %")),
+    ("NYG defense time to pressure", ("sumer", "teams_defense", "TTP"),
+     ("nfl_pro", "ngs_team_defense", "pass_defense", "TTP")),
+    ("Opponent time to throw", ("sumer", "teams_defense", "TTT"),
+     ("nfl_pro", "ngs_team_defense", "pass_defense", "TTT")),
+    ("NYG QB time to throw", ("sumer", "game_page", "nyg", "pass_game", "avg_time_to_throw"),
+     ("nfl_pro", "ngs_team_offense", "passing", "TTT")),
+]
+
+
+def _dig(d, path):
+    for k in path:
+        if not isinstance(d, dict):
+            return None
+        d = d.get(k)
+    return d
+
+
+def cross_source(extract: dict) -> list[dict]:
+    """Where Sūmer and NFL Pro measure the same thing, side by side. Disagreement is content,
+    not an error: they chart independently. Big gaps are worth a sentence in the post."""
+    rows = []
+    for label, sp, npp in CROSS:
+        a, b = _num(_dig(extract, sp)), _num(_dig(extract, npp))
+        if a is not None or b is not None:
+            rows.append({"measure": label, "sumer": a, "nfl_pro": b,
+                         "gap": None if a is None or b is None else round(b - a, 2)})
+    pers = {(p["team"], p["personnel"]): p.get("plays") for p in (_dig(extract, ("nfl_pro", "personnel")) or [])}
+    s11 = next((d.get("pct") for d in (_dig(extract, ("sumer", "game_page", "nyg", "tendencies",
+                                                      "offensive_personnel")) or []) if d.get("label", "").startswith("11")), None)
+    n11 = pers.get(("NYG", "1 RB, 1 TE, 3 WR"))
+    if s11 is not None or n11 is not None:
+        rows.append({"measure": "NYG 11 personnel (Sūmer %, NFL Pro plays)", "sumer": s11, "nfl_pro": n11, "gap": None})
+    return rows
 
 
 def free_counts(game: pl.DataFrame, team: str = config.TEAM) -> FreeCounts:

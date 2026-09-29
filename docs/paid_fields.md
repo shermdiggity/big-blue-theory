@@ -41,21 +41,39 @@ game (TEN @ NYG). NFL Pro isn't mapped yet.
   once opening a new chat. Since the tables already have these numbers, SūmerBrain is only a
   backup for questions the tables can't answer.
 
-## NFL Pro: partially mapped (run 1: data tables came back empty)
+## NFL Pro: mapped (run 2)
 
-Box Score, Team Stats and Insights loaded, and all their numbers match free play-by-play.
-Every data table was empty in that session (the game's NGS Stats tab, the game's Play By Play,
-Film Room, and even season NGS leaders). Cause unknown: outage, or the session being held back.
+Run 1 hit empty data tables. Run 2 found the data: the game's Stats tab fills in 20–30 seconds
+after it first says "no results". Every view below filters to the single game or week.
 
-| Page | What's there | Useful | Status |
+| Page | What's there | Useful | Schema path |
 |---|---|---|---|
-| Games > week > game > **Play By Play** | Filters: Play Type, Team, **Personnel**, **Off Formation**, **Pass Rush Count**, **In The Box Count**, plus a live "Number of plays" count | **High**: per-game personnel and formation counts; plays join to free play-by-play by quarter/down/yardline | Empty in run 1 |
-| Game > **Stats** | Game-level Next Gen Stats ("available the day after") | High (unconfirmed) | Empty 2 days after the game |
-| Game > **Insights** | Prose cards: run stops, yards after contact, air yards/target, target share, coverage notes | Medium: story hooks, numbers inside sentences | Loaded |
-| Game > Box Score / Team Stats | Standard box score (+ YAC, QB hits, TFL) | Low: free data has it | Loaded |
-| Next Gen Stats > Passing/Rushing/Receiving/Defense/Team Offense/Team Defense | **Season Leaders** and **Single-Game Leaders**. Passing columns include CPOE, EPA/DB, **time to throw**, **QB pressures**, QBP% | **High** for TTT, pressure, separation, rush yards over expected (not in free data) | Empty in run 1 |
-| Film Room | Season, type, week, game, player/team search; saved searches | Medium: film for claims the data can't settle | Video didn't load |
+| Game > **Stats** > Passing (Overview/Advanced) | TTT, CPOE, QB pressures (QBP, QBP %), sacks, dropbacks, EPA; AY/Att, deep %, PA %, tight-window %, avg separation, **Blitz % faced** | **High** (TTT, pressures, blitz) | `nfl_pro.game_stats.passing` |
+| Game > Stats > Rushing | **RYOE**, RYOE/Att, **YACo**, 10+ yds, 15+/20+ MPH; xRY, xYPC, success %, inside %, **Stacked %** (≈ 8+ box), UC % | **High** | `nfl_pro.game_stats.rushing` |
+| Game > Stats > Receiving | **Routes**, CROE, YAC, **YACOE**, AY/Tgt, **Avg. Sep**; target %, **yds/route**, EPA/tgt, deep %, tight-window % | **High** | `nfl_pro.game_stats.receiving` |
+| Game > **Play By Play** | Filters Team + **Personnel** / Off Formation / Pass Rush Count / Box Count → "Number of plays" | **High** (personnel, second source to Sūmer) | `nfl_pro.personnel` |
+| **Film Room** (Game preset) | "N plays matching": Pressure, Blitz, PA, Motion, QB alignment, air yards, TTT, rush direction, run stuff, receiver alignment, separation, def personnel, box, coverage type (press/off). Each play lists all 22 players on the field | High for pressure/blitz counts and film | `nfl_pro.film_room` |
+| NGS > **Team Defense** (Week) > Pass / Run Defense | Blitz %, QBP, QBP %, TTP, get-off, sack %, TTT, YACOE, avg sep… | **High** | `nfl_pro.ngs_team_defense` |
+| NGS > **Team Offense** (Week) | Same layout, offense side (not opened yet) | likely High | `nfl_pro.ngs_team_offense` |
+| Game > **Insights** | Prose cards (run stops, yards after contact, air yards/target…) | Medium: story hooks | `nfl_pro.insights` |
+| Game > Box Score / Team Stats | Standard box score | Low: free data has it | — |
 
-Not seen yet: coverage shells, routes per receiver, OL pressures per player, run concept/gap.
-SūmerPass already covers most of those, so NFL Pro's unique value is probably the NGS tracking
-metrics (time to throw, separation, rush yards over expected) plus All-22 film.
+### Not on NFL Pro
+Coverage shells (only press/off), run concepts and designed vs actual gap, route *types*,
+pressures allowed per OL. **Sūmer covers all four**, so the two sources complement each other:
+Sūmer = scheme (coverage, concepts, gaps, per-OL pressures), NFL Pro = tracking (time to throw,
+separation, RYOE, routes and yards per route per receiver) + film.
+
+### Cross-checks found
+- NFL Pro's numbers agree with each other: Film Room pressure plays equal the sum of both QBs'
+  QBP, and team Blitz % equals the opposing QB's Blitz % faced.
+- **Sūmer and NFL Pro chart independently and don't always agree** (e.g. Week 3 NYG blitz count
+  and NYG QB pressures differ by 1–3 plays). The packet shows them side by side. Where they
+  disagree, say so in the post rather than picking one.
+- NFL Pro "Number of plays" counts every play (special teams and penalties too), so it's
+  bigger than Sūmer's "Plays". Filter to offensive play types, or use the free data's count.
+
+### Free participation data?
+nflverse's participation data (personnel, man/zone) stops at 2025: `load_participation(2026)`
+returns "Season must be between 2016 and 2025". So 2026 personnel and coverage have to come
+from the paid sources, at least until nflverse catches up.

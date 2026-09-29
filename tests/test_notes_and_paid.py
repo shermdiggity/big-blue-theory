@@ -107,3 +107,29 @@ def test_free_data_mismatch_warns():
 def test_wrong_game_fails():
     r = paid.check(_extract(), RAW, 3, "2026_03_NYG_DAL", FREE)
     assert not r.ok
+
+
+def test_nfl_pro_consistency_and_cross_source():
+    ex = _extract()
+    ex["nfl_pro"] = {
+        "game_stats": {"passing": [{"Player": "QB A", "QBP": 4}, {"Player": "QB B", "QBP": 5}]},
+        "film_room": {"all_plays": 100, "pressure_plays": 10},
+        "personnel": [{"team": "NYG", "personnel": "ALL", "plays": 60},
+                      {"team": "NYG", "personnel": "1 RB, 1 TE, 3 WR", "plays": 30},
+                      {"team": "NYG", "personnel": "1 RB, 2 TE, 2 WR", "plays": 20}],
+        "ngs_team_defense": {"pass_defense": {"Blitz %": "25.0%"}},
+    }
+    raw = RAW + " QBP 4 5 100 10 60 30 20 25.0%"
+    r = paid.check(ex, raw, 3, "2026_03_TEN_NYG", FREE)
+    assert any("Film Room pressure plays 10 != sum of QBP" in w for w in r.warnings)
+    assert any("groupings sum to 50 but ALL = 60" in w for w in r.warnings)
+    xs = {x["measure"]: x for x in paid.cross_source(ex)}
+    assert xs["NYG defense blitz rate"]["sumer"] == 22.2 and xs["NYG defense blitz rate"]["nfl_pro"] == 25.0
+    assert xs["NYG 11 personnel (Sūmer %, NFL Pro plays)"]["nfl_pro"] == 30
+
+
+def test_verbatim_string_numbers_are_traced():
+    ex = _extract()
+    ex["sumer"]["teams_defense"]["Blitz %"] = "44.4%"
+    r = paid.check(ex, RAW, 3, "2026_03_TEN_NYG", FREE)
+    assert any("Blitz %` = 44.4 not found" in w for w in r.warnings), r.render()
