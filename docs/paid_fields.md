@@ -41,5 +41,21 @@ game (TEN @ NYG). NFL Pro isn't mapped yet.
   once opening a new chat. Since the tables already have these numbers, SūmerBrain is only a
   backup for questions the tables can't answer.
 
-## NFL Pro
-Not explored yet. Run `agent/EXPLORE.md` with `SITE FOR THIS RUN` = `NFL Pro`.
+## NFL Pro: partially mapped (run 1: data tables came back empty)
+
+Box Score, Team Stats and Insights loaded, and all their numbers match free play-by-play.
+Every data table was empty in that session (the game's NGS Stats tab, the game's Play By Play,
+Film Room, and even season NGS leaders). Cause unknown: outage, or the session being held back.
+
+| Page | What's there | Useful | Status |
+|---|---|---|---|
+| Games > week > game > **Play By Play** | Filters: Play Type, Team, **Personnel**, **Off Formation**, **Pass Rush Count**, **In The Box Count**, plus a live "Number of plays" count | **High**: per-game personnel and formation counts; plays join to free play-by-play by quarter/down/yardline | Empty in run 1 |
+| Game > **Stats** | Game-level Next Gen Stats ("available the day after") | High (unconfirmed) | Empty 2 days after the game |
+| Game > **Insights** | Prose cards: run stops, yards after contact, air yards/target, target share, coverage notes | Medium: story hooks, numbers inside sentences | Loaded |
+| Game > Box Score / Team Stats | Standard box score (+ YAC, QB hits, TFL) | Low: free data has it | Loaded |
+| Next Gen Stats > Passing/Rushing/Receiving/Defense/Team Offense/Team Defense | **Season Leaders** and **Single-Game Leaders**. Passing columns include CPOE, EPA/DB, **time to throw**, **QB pressures**, QBP% | **High** for TTT, pressure, separation, rush yards over expected (not in free data) | Empty in run 1 |
+| Film Room | Season, type, week, game, player/team search; saved searches | Medium: film for claims the data can't settle | Video didn't load |
+
+Not seen yet: coverage shells, routes per receiver, OL pressures per player, run concept/gap.
+SūmerPass already covers most of those, so NFL Pro's unique value is probably the NGS tracking
+metrics (time to throw, separation, rush yards over expected) plus All-22 film.
