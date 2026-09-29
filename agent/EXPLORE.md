@@ -2,6 +2,9 @@
 
 Paste everything below the line into Claude in Chrome, with the user already logged into
 sumersports.com (SūmerPass) and pro.nfl.com (NFL+ Premium) in the same Chrome profile.
+
+**Run it in two sittings, one site each** (e.g. Sūmer one evening, NFL Pro the next). Replace
+`SITE FOR THIS RUN` below with `SūmerPass` or `NFL Pro`. Watch the first run so you can stop it.
 Paste Claude's final reply back into the Claude Code session. It turns that into
 `docs/paid_fields.md` and the final `agent/paid_extract.schema.json`.
 
@@ -13,15 +16,33 @@ has, where it lives, and how reliably it can be read**, so that a later weekly r
 one game's numbers into a fixed schema. The reference game is **Week 3, 2026: Tennessee Titans
 at New York Giants (NYG won 12–7).**
 
+**SITE FOR THIS RUN: `SITE FOR THIS RUN`.** Only explore that site in this run.
+
 ## Rules (non-negotiable)
+The goal is to use the site the way one careful person reading it would. Nothing about
+this session should look or behave like a scraper.
 - **Read only.** Never click export, download, share, account, settings, billing, subscribe or
   upgrade, and never change profile or preferences. Never log in, log out, or type credentials.
   If a page asks you to sign in, stop and tell the user.
-- **Human pace.** One tab at a time. Let each page finish loading. Pause a few seconds between
-  pages. No rapid loops through dozens of pages. Budget: about 40 page views total.
-- Filters, dropdowns, tabs, sorting and "load more" are fine: they only change the view.
-- If you hit a CAPTCHA, a rate-limit message, or anything that looks like it's flagging
-  automation, **stop immediately** and report where you were.
+- **Pace like a person reading.** One tab only. Wait until the page has fully loaded, then
+  spend time reading it. Leave **at least 10 seconds between navigations**, and at least 5
+  seconds between filter or dropdown changes on the same page. Never fire actions back to back.
+- **Hard caps for this run: 25 page loads, 60 filter/tab/dropdown changes, about 30 minutes.**
+  Keep a running count. When you hit any cap, stop and report what you have. Partial is fine.
+- **No bulk behavior.** Don't cycle through every team, week or player. Stick to NYG, Week 3,
+  plus at most one other game for comparison. Don't paginate through whole league tables:
+  read the first page and note that more pages exist. Don't scroll-to-load endlessly.
+- **Only the normal page.** No developer tools, console, network tab, page source, API
+  endpoints, URL editing to jump around, or bookmarklets. Navigate only by clicking visible
+  links and controls, the way a person would.
+- **Video:** in the Film Room, play at most 2 clips, briefly, just to confirm what a clip is
+  linked to. Don't download or queue up playlists.
+- **SūmerBrain:** only the 6 questions listed below, no more. Wait for each answer to finish
+  before doing anything else.
+- Filters, dropdowns, tabs and sorting are fine: they only change the view.
+- If you see a CAPTCHA, "unusual activity", a rate-limit or "too many requests" message, a
+  forced logout, or anything that looks like it's flagging automation, **stop immediately**,
+  don't retry, and report exactly where you were.
 - Don't copy URLs that contain tokens or session ids. Describe pages by breadcrumb
   ("SūmerPass > Teams > Offense > Personnel Tendency").
 

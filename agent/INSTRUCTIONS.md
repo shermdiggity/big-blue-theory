@@ -8,8 +8,10 @@ follows `agent/paid_extract.schema.json`, plus a raw text file.
 1. **Read only.** Never click export, download, share, settings, account, billing, "upgrade",
    or anything that changes state. Never log in or out, and never type credentials.
 2. **One game only**: the game named in the task. Don't browse other games or seasons.
-3. **Human pace.** One page at a time. Wait for each page to load fully. Don't open many tabs
-   at once, and don't scrape in loops. Pause a few seconds between pages.
+3. **Human pace.** One tab. Wait for each page to load fully, then read it. At least 10 seconds
+   between navigations and 5 seconds between filter changes. Cap: 20 page loads per weekly run.
+   Only the normal page: no dev tools, console, page source, API calls or URL editing.
+   Navigate by clicking visible links and controls. Don't loop through teams, weeks or players.
 4. **Copy numbers exactly** as shown: same rounding, same units. Percentages stay 0–100
    (`38.5`, not `0.385`). Don't calculate, estimate, or "fix" anything.
 5. **If a number isn't on the page**, put `null` and add its dotted path to `missing_fields`
@@ -20,8 +22,8 @@ follows `agent/paid_extract.schema.json`, plus a raw text file.
    report in it.
 7. Page names in `sources` are breadcrumbs ("Sūmer > Team > NYG > Week 3 > Personnel"), **not**
    URLs. URLs can carry session tokens.
-8. If you hit a login wall, paywall, CAPTCHA, or anything unexpected, **stop** and report it.
-   Don't work around it.
+8. If you hit a login wall, paywall, CAPTCHA, "unusual activity" or rate-limit message, a forced
+   logout, or anything unexpected, **stop** and report it. Don't retry, and don't work around it.
 
 ## SūmerBrain questions (only if `private/notes/<tag>_sumerbrain_questions.json` exists)
 SūmerBrain is useful but not reliable on its own: it has given different answers to the same
