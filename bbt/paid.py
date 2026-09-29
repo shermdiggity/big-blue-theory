@@ -1,15 +1,18 @@
-"""Ticket 9: check a browser-agent extract before trusting it.
+"""Ticket 9: check a browser-agent extract (schema v1) before trusting it.
 
 Checks:
   errors   (the extract is rejected)
     - required fields present, game/week/team match
     - every null is listed in missing_fields
     - percentages inside 0-100
-    - distribution percentages sum to ~100
+    - rate breakdowns (personnel, run concepts, split shares) sum to ~100
   warnings (look before you publish)
-    - a reported number doesn't appear anywhere in the raw page text (possible invention)
-    - snap totals don't match the free play-by-play count
-    - SūmerBrain gave different answers to the same question (mark "unreliable")
+    - a number doesn't appear in the raw page text (possible invention); values the agent
+      read from a screenshot are exempt but must pass the consistency checks
+    - a split's share % doesn't match its own counts
+    - different split tables disagree on the total (e.g. by-coverage vs pressure attempts)
+    - counts don't match the free play-by-play (plays, pass attempts, sacks, runs)
+    - SūmerBrain answers differ or give no counts
 """
 
 from __future__ import annotations
@@ -23,10 +26,10 @@ import polars as pl
 
 from bbt import config
 
-REQUIRED = ["schema_version", "season", "week", "game_id", "team", "extracted_at", "sources",
-            "sumer", "nfl_pro", "missing_fields", "raw_text_file"]
+REQUIRED = ["schema_version", "season", "week", "game_id", "team", "opponent", "extracted_at",
+            "sources", "sumer", "missing_fields", "raw_text_file"]
 PCT_SUM_TOLERANCE = 2.0
-SNAP_TOLERANCE = 0.05
+SHARE_TOLERANCE = 1.5   # percentage points between a split's share % and its counts
 
 
 @dataclass
@@ -34,17 +37,31 @@ class Report:
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     checked_numbers: int = 0
+    screenshot_numbers: int = 0
 
     @property
     def ok(self) -> bool:
         return not self.errors
 
     def render(self) -> str:
-        lines = [f"{'PASS' if self.ok else 'FAIL'}: {len(self.errors)} errors, "
-                 f"{len(self.warnings)} warnings, {self.checked_numbers} numbers traced to page text"]
+        lines = [f"{'PASS' if self.ok else 'FAIL'}: {len(self.errors)} errors, {len(self.warnings)} warnings, "
+                 f"{self.checked_numbers} numbers traced to page text, "
+                 f"{self.screenshot_numbers} from screenshots"]
         lines += [f"  ERROR  {e}" for e in self.errors]
         lines += [f"  warn   {w}" for w in self.warnings]
         return "\n".join(lines)
+
+
+@dataclass
+class FreeCounts:
+    """What the free play-by-play says, in Sūmer's denominators."""
+    off_plays: int        # NYG run + pass + kneel + spike (no penalty snaps)
+    pass_att: int         # NYG pass attempts incl. sacks (Sūmer game-page passing denominator)
+    sacks_taken: int
+    rushes: int           # NYG designed runs + scrambles
+    opp_pass_att: int     # what NYG's defense faced
+    opp_rushes: int
+    sacks_made: int
 
 
 def paths(week: int) -> tuple[Path, Path]:
@@ -69,24 +86,52 @@ def _walk(obj, prefix=""):
         yield prefix, obj
 
 
-def _number_in_text(value: float, text_numbers: set[str]) -> bool:
-    candidates = {str(value)}
+def _number_forms(value: float) -> set[str]:
+    forms = {str(value)}
     if isinstance(value, float):
-        candidates |= {f"{value:.1f}", f"{value:.2f}", f"{value:.0f}" if value.is_integer() else ""}
+        forms |= {f"{value:.1f}", f"{value:.2f}", f"{value:.3f}"}
         if value.is_integer():
-            candidates.add(str(int(value)))
-    return bool(candidates & text_numbers)
+            forms.add(str(int(value)))
+    if isinstance(value, (int, float)) and value < 0:
+        forms |= {f.replace("-", "−") for f in forms}  # pages often use a real minus sign
+    return forms
+
+
+def _splits(extract: dict):
+    """Yield (path, rows) for every split table in the game page."""
+    gp = (extract.get("sumer") or {}).get("game_page") or {}
+    for side in ("nyg", "opp"):
+        tab = gp.get(side) or {}
+        for group in ("passing", "rushing"):
+            for key, rows in (tab.get(group) or {}).items():
+                if rows:
+                    yield f"sumer.game_page.{side}.{group}.{key}", rows
+
+
+def _dists(extract: dict):
+    gp = (extract.get("sumer") or {}).get("game_page") or {}
+    for side in ("nyg", "opp"):
+        tend = ((gp.get(side) or {}).get("tendencies")) or {}
+        for key in ("offensive_personnel", "run_concepts", "defensive_personnel"):
+            if tend.get(key):
+                yield f"sumer.game_page.{side}.tendencies.{key}", [d.get("pct") for d in tend[key]]
+
+
+def _total(rows, key):
+    vals = [r.get(key) for r in rows if isinstance(r.get(key), (int, float))]
+    return sum(vals) if vals else None
 
 
 def check(extract: dict, raw_text: str | None, week: int, game_id: str,
-          free_offense_snaps: int | None = None, free_defense_snaps: int | None = None) -> Report:
+          free: FreeCounts | None = None) -> Report:
     r = Report()
-
     for k in REQUIRED:
         if k not in extract:
             r.errors.append(f"missing required field `{k}`")
     if r.errors:
         return r
+    if extract.get("schema_version") != "v1":
+        r.errors.append(f"schema_version {extract.get('schema_version')!r}, expected 'v1'")
     if extract["game_id"] != game_id:
         r.errors.append(f"game_id {extract['game_id']} != expected {game_id}")
     if extract["week"] != week:
@@ -95,69 +140,116 @@ def check(extract: dict, raw_text: str | None, week: int, game_id: str,
         r.errors.append(f"team {extract['team']} != {config.TEAM}")
 
     missing = set(extract.get("missing_fields") or [])
-    leaves = list(_walk({k: extract[k] for k in ("sumer", "nfl_pro") if k in extract}))
+    shots = set(extract.get("screenshot_fields") or [])
+    leaves = list(_walk({k: extract[k] for k in ("sumer", "nfl_pro") if extract.get(k)}))
 
-    # every null accounted for
     for path, v in leaves:
         if v is None and path not in missing:
             r.errors.append(f"`{path}` is null but not listed in missing_fields")
+        is_pct = (path.endswith(("pct", "_rate")) or path.endswith("%") or "%" in path.rsplit(".", 1)[-1])
+        if is_pct and isinstance(v, (int, float)) and not 0 <= v <= 100:
+            r.errors.append(f"`{path}` = {v} is outside 0-100")
 
-    # percent ranges + distributions that should sum to ~100
-    for path, v in leaves:
-        if (path.endswith(".pct") or path.endswith("_rate")) and isinstance(v, (int, float)):
-            if not 0 <= v <= 100:
-                r.errors.append(f"`{path}` = {v} is outside 0-100")
-            elif 0 < v <= 1 and path.endswith("_rate"):
-                r.warnings.append(f"`{path}` = {v}: looks like a fraction, pages show 0-100")
-    for path, dist in _distributions(extract):
-        pcts = [d.get("pct") for d in dist if d.get("pct") is not None]
-        if pcts and abs(sum(pcts) - 100) > PCT_SUM_TOLERANCE:
-            r.errors.append(f"`{path}` percentages sum to {sum(pcts):.1f}, not ~100")
+    for path, pcts in _dists(extract):
+        vals = [p for p in pcts if p is not None]
+        if vals and abs(sum(vals) - 100) > PCT_SUM_TOLERANCE:
+            r.errors.append(f"`{path}` sums to {sum(vals):.1f}, not ~100")
 
-    # snaps vs free data
-    for side, free in (("offense", free_offense_snaps), ("defense", free_defense_snaps)):
-        paid = (extract.get("sumer") or {}).get(side, {}).get("snaps")
-        if paid and free and abs(paid - free) / free > SNAP_TOLERANCE:
-            r.warnings.append(f"sumer.{side}.snaps = {paid} but free play-by-play has {free} "
-                              f"({(paid - free) / free:+.0%})")
-        personnel = (extract.get("sumer") or {}).get(side, {}).get("personnel") or []
-        counts = [d.get("count") for d in personnel if d.get("count") is not None]
-        if paid and counts and abs(sum(counts) - paid) > max(2, paid * 0.02):
-            r.warnings.append(f"sumer.{side}.personnel counts sum to {sum(counts)}, snaps = {paid}")
+    # split tables: shares sum to ~100, shares match their own counts
+    totals: dict[str, dict[str, float]] = {}
+    for path, rows in _splits(extract):
+        shares = [x.get("share_pct") for x in rows if x.get("share_pct") is not None]
+        if shares and abs(sum(shares) - 100) > PCT_SUM_TOLERANCE and not path.endswith("by_route"):
+            r.errors.append(f"`{path}` shares sum to {sum(shares):.1f}, not ~100")
+        att_total = _total(rows, "att")
+        if att_total:
+            side_group = path.rsplit(".", 1)[0]
+            totals.setdefault(side_group, {})[path.rsplit(".", 1)[1]] = att_total
+            for i, x in enumerate(rows):
+                if x.get("share_pct") is not None and x.get("att") is not None:
+                    implied = 100 * x["att"] / att_total
+                    if abs(implied - x["share_pct"]) > SHARE_TOLERANCE:
+                        r.warnings.append(f"`{path}[{i}]` ({x['label']}): share {x['share_pct']}% but "
+                                          f"{x['att']}/{att_total} att = {implied:.1f}%")
+    for side_group, by_key in totals.items():
+        if len(set(by_key.values())) > 1:
+            r.warnings.append(f"`{side_group}` split tables disagree on total attempts: {by_key}")
 
-    # trace every number to the raw text
+    if free:
+        _free_checks(extract, free, totals, r)
+
     if raw_text is None:
         r.errors.append("raw page text file not found. Can't verify any number")
     else:
-        text_numbers = set(re.findall(r"-?\d+(?:\.\d+)?", raw_text.replace(",", "")))
+        text = raw_text.replace(",", "")
+        text_numbers = set(re.findall(r"[-−]?\d+(?:\.\d+)?", text))
         for path, v in leaves:
             if isinstance(v, bool) or not isinstance(v, (int, float)):
                 continue
+            if path in shots:
+                r.screenshot_numbers += 1
+                continue
             r.checked_numbers += 1
-            if not _number_in_text(v, text_numbers):
+            if not (_number_forms(v) & text_numbers):
                 r.warnings.append(f"`{path}` = {v} not found in raw page text")
 
     for q in extract.get("sumerbrain") or []:
-        if q.get("answer_1", "").strip() != q.get("answer_2", "").strip() and not q.get("consistent"):
+        if q.get("answer_2") and q.get("answer_1", "").strip() != q["answer_2"].strip() and not q.get("consistent"):
             r.warnings.append(f"SūmerBrain claim line {q.get('claim_line')}: answers differ -> unreliable")
         if not q.get("counts_given"):
             r.warnings.append(f"SūmerBrain claim line {q.get('claim_line')}: no raw counts given")
     return r
 
 
-def _distributions(extract: dict):
-    s, n = extract.get("sumer") or {}, extract.get("nfl_pro") or {}
-    for side in ("offense", "defense"):
-        for key in ("personnel", "formations", "coverage_faced", "coverage"):
-            d = (s.get(side) or {}).get(key)
-            if d:
-                yield f"sumer.{side}.{key}", d
-    if n.get("run_scheme"):
-        yield "nfl_pro.run_scheme", n["run_scheme"]
+def _free_checks(extract: dict, free: FreeCounts, totals: dict, r: Report) -> None:
+    def warn_if(label, paid, freev, tol=1):
+        if paid is not None and freev is not None and abs(paid - freev) > tol:
+            r.warnings.append(f"{label}: Sūmer {paid} vs free play-by-play {freev}")
+
+    plays = (extract["sumer"].get("teams_offense") or {}).get("Plays")
+    warn_if("NYG offensive plays (Teams > Offense 'Plays')", plays, free.off_plays)
+
+    nyg_pass = totals.get("sumer.game_page.nyg.passing", {})
+    opp_pass = totals.get("sumer.game_page.opp.passing", {})
+    nyg_rush = totals.get("sumer.game_page.nyg.rushing", {})
+    opp_rush = totals.get("sumer.game_page.opp.rushing", {})
+    if nyg_pass:
+        warn_if("NYG pass attempts (game page splits)", max(nyg_pass.values()), free.pass_att)
+    if opp_pass:
+        warn_if(f"{extract['opponent']} pass attempts (game page splits)", max(opp_pass.values()), free.opp_pass_att)
+    if nyg_rush:
+        warn_if("NYG rush attempts (game page splits)", max(nyg_rush.values()), free.rushes, tol=2)
+    if opp_rush:
+        warn_if(f"{extract['opponent']} rush attempts (game page splits)", max(opp_rush.values()), free.opp_rushes, tol=2)
+
+    gp = extract["sumer"].get("game_page") or {}
+    for side, freev, label in (("nyg", free.sacks_taken, "NYG sacks taken"),
+                               ("opp", free.sacks_made, "NYG sacks made")):
+        rows = (((gp.get(side) or {}).get("passing") or {}).get("pressure")) or []
+        warn_if(f"{label} (Pressure split)", _total(rows, "sacks"), freev, tol=0)
+
+
+def free_counts(game: pl.DataFrame, team: str = config.TEAM) -> FreeCounts:
+    rp = game.filter(pl.col("play_type").is_in(["pass", "run"]))
+    off = rp.filter(pl.col("posteam") == team)
+    de = rp.filter(pl.col("defteam") == team)
+    kneels = game.filter((pl.col("posteam") == team) & pl.col("play_type").is_in(["qb_kneel", "qb_spike"])).height
+    return FreeCounts(
+        off_plays=off.height + kneels,
+        pass_att=int(off["pass_attempt"].sum()),
+        sacks_taken=int(off["sack"].sum()),
+        rushes=int(off["rush_attempt"].sum()),
+        opp_pass_att=int(de["pass_attempt"].sum()),
+        opp_rushes=int(de["rush_attempt"].sum()),
+        sacks_made=int(de["sack"].sum()),
+    )
 
 
 def free_snap_counts(game: pl.DataFrame, team: str = config.TEAM) -> tuple[int, int]:
-    """Offensive/defensive snaps from play-by-play: run, pass and wiped plays (not pre-snap flags)."""
+    """Offensive/defensive snaps from play-by-play: run, pass and wiped plays (not pre-snap flags).
+
+    Matches PFR/official snap counts. (Sūmer's 'Plays' excludes penalty snaps: see free_counts.)
+    """
     from bbt.penalties import classify
 
     scrimmage = game.filter(pl.col("play_type").is_in(["pass", "run", "qb_kneel", "qb_spike", "no_play"]))
@@ -176,5 +268,4 @@ def run_check(week: int, game: pl.DataFrame, game_id: str) -> Report | None:
         return None
     _, raw_path = paths(week)
     raw = raw_path.read_text() if raw_path.exists() else None
-    off, de = free_snap_counts(game)
-    return check(extract, raw, week, game_id, off, de)
+    return check(extract, raw, week, game_id, free_counts(game))

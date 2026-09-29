@@ -104,7 +104,7 @@ number lives.
 | Source | Breadcrumb / page | Field label as shown | Unit (count / % / avg / yds) | Single-game filter? (Y/N/how) | Team or player | Useful for blog? (H/M/L) | Also in free data? |
 
 ### B. Sample values for spot-checking (Week 3 only)
-10–15 values copied **exactly** as shown, e.g. `SūmerPass > Teams > Defense > Coverage | Cover 3 | 38.5%`.
+10–15 values copied **exactly** as shown, e.g. `SūmerPass > Teams > Defense > Coverage | Cover 3 | xx.x%`.
 Mix of both sites. (These stay private and are used to test the extractor.)
 
 ### C. SūmerBrain test

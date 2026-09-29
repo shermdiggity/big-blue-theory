@@ -1,165 +1,150 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "big-blue-theory/paid_extract/v0",
-  "title": "Paid-data extract for one Giants game (DRAFT v0: finalize after ticket 8)",
-  "description": "What the browser agent returns after reading SumerPass and NFL Pro pages for ONE game. Every number is copied exactly from the page. Anything not on the page is null AND listed in missing_fields. The filled-in file lives in private/paid/ and is never committed.",
+  "$id": "big-blue-theory/paid_extract/v1",
+  "title": "Paid-data extract for one Giants game (v1: SumerPass mapped; NFL Pro still draft)",
+  "description": "What the browser agent returns after reading SumerPass (and later NFL Pro) for ONE game. Tables are stored as {verbatim column label: value as shown} so nothing gets renamed or recomputed. Every number is copied exactly. Anything not on the page is null AND listed in missing_fields. The filled file lives in private/paid/ and is never committed.",
   "type": "object",
-  "required": ["schema_version", "season", "week", "game_id", "team", "extracted_at", "sources", "sumer", "nfl_pro", "missing_fields", "raw_text_file"],
-  "additionalProperties": false,
+  "required": ["schema_version", "season", "week", "game_id", "team", "opponent", "extracted_at", "sources", "sumer", "missing_fields", "raw_text_file"],
   "properties": {
-    "schema_version": {"const": "v0"},
+    "schema_version": {"const": "v1"},
     "season": {"type": "integer"},
     "week": {"type": "integer"},
     "game_id": {"type": "string", "pattern": "^\\d{4}_\\d{2}_[A-Z]{2,3}_[A-Z]{2,3}$"},
     "team": {"const": "NYG"},
-    "extracted_at": {"type": "string", "description": "ISO timestamp"},
+    "opponent": {"type": "string"},
+    "extracted_at": {"type": "string"},
     "sources": {
       "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["source", "page"],
-        "properties": {
-          "source": {"enum": ["sumer", "sumerbrain", "nfl_pro"]},
-          "page": {"type": "string", "description": "Page name / breadcrumb, not a URL with tokens"}
-        }
-      }
+      "items": {"type": "object", "required": ["source", "page"],
+                "properties": {"source": {"enum": ["sumer", "sumerbrain", "nfl_pro"]}, "page": {"type": "string"}}}
     },
     "sumer": {
       "type": "object",
-      "required": ["offense", "defense", "players"],
+      "required": ["game_page", "teams_offense", "teams_defense", "players"],
       "properties": {
-        "offense": {
+        "game_page": {
           "type": "object",
+          "description": "SumerLive > game > View Stats. 'nyg' = Giants tab (NYG offense + NYG defense tendencies). 'opp' = opponent tab (opponent offense = what NYG's defense faced).",
           "properties": {
-            "snaps": {"type": ["integer", "null"]},
-            "personnel": {"$ref": "#/$defs/distribution"},
-            "formations": {"$ref": "#/$defs/distribution"},
-            "coverage_faced": {"$ref": "#/$defs/distribution"},
-            "pressure_rate_allowed": {"$ref": "#/$defs/pct"},
-            "pressures_allowed": {"type": ["integer", "null"]},
-            "blitz_rate_faced": {"$ref": "#/$defs/pct"},
-            "time_to_throw": {"type": ["number", "null"]}
+            "nyg": {"$ref": "#/$defs/team_tab"},
+            "opp": {"$ref": "#/$defs/team_tab"}
           }
         },
-        "defense": {
-          "type": "object",
-          "properties": {
-            "snaps": {"type": ["integer", "null"]},
-            "personnel": {"$ref": "#/$defs/distribution"},
-            "coverage": {"$ref": "#/$defs/distribution"},
-            "man_rate": {"$ref": "#/$defs/pct"},
-            "zone_rate": {"$ref": "#/$defs/pct"},
-            "blitz_rate": {"$ref": "#/$defs/pct"},
-            "pressure_rate": {"$ref": "#/$defs/pct"},
-            "pressures": {"type": ["integer", "null"]}
-          }
-        },
+        "teams_offense": {"$ref": "#/$defs/row", "description": "Teams > Offense, Week filter = this week, the NYG row, all columns verbatim"},
+        "teams_defense": {"$ref": "#/$defs/row", "description": "Teams > Defense, Week filter = this week, the NYG row, all columns verbatim"},
         "players": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": ["name", "position"],
-            "properties": {
-              "name": {"type": "string"},
-              "position": {"type": "string"},
-              "snaps": {"type": ["integer", "null"]},
-              "routes": {"type": ["integer", "null"]},
-              "targets": {"type": ["integer", "null"]},
-              "pressures_allowed": {"type": ["integer", "null"]},
-              "pressures": {"type": ["integer", "null"]},
-              "coverage_snaps": {"type": ["integer", "null"]},
-              "targets_allowed": {"type": ["integer", "null"]}
-            }
-          }
-        }
-      }
-    },
-    "nfl_pro": {
-      "type": "object",
-      "properties": {
-        "run_scheme": {"$ref": "#/$defs/distribution"},
-        "designed_vs_actual_gap": {
-          "type": ["array", "null"],
-          "items": {
-            "type": "object",
-            "required": ["designed", "actual", "count"],
-            "properties": {
-              "designed": {"type": "string"},
-              "actual": {"type": "string"},
-              "count": {"type": "integer"}
-            }
-          }
-        },
-        "passer": {
-          "type": ["object", "null"],
+          "type": "object",
+          "description": "Players > <position>, Week = this week, Team = NYG. One entry per position table; each row = {column label: value} including 'Player'.",
           "properties": {
-            "name": {"type": "string"},
-            "time_to_throw": {"type": ["number", "null"]},
-            "avg_air_yards": {"type": ["number", "null"]},
-            "cpoe": {"type": ["number", "null"]},
-            "aggressiveness": {"$ref": "#/$defs/pct"}
-          }
-        },
-        "receivers": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": ["name"],
-            "properties": {
-              "name": {"type": "string"},
-              "avg_separation": {"type": ["number", "null"]},
-              "avg_cushion": {"type": ["number", "null"]},
-              "yac_above_expected": {"type": ["number", "null"]}
-            }
-          }
-        },
-        "rushers": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": ["name"],
-            "properties": {
-              "name": {"type": "string"},
-              "carries": {"type": ["integer", "null"]},
-              "rush_yards_over_expected": {"type": ["number", "null"]},
-              "efficiency": {"type": ["number", "null"]},
-              "eight_plus_box_rate": {"$ref": "#/$defs/pct"}
-            }
+            "offensive_line": {"$ref": "#/$defs/rows"},
+            "cornerback": {"$ref": "#/$defs/rows"},
+            "safety": {"$ref": "#/$defs/rows"},
+            "linebacker": {"$ref": "#/$defs/rows"},
+            "edge_rusher": {"$ref": "#/$defs/rows"},
+            "defensive_interior": {"$ref": "#/$defs/rows"},
+            "wide_receiver": {"$ref": "#/$defs/rows"},
+            "tight_end": {"$ref": "#/$defs/rows"},
+            "running_back": {"$ref": "#/$defs/rows"},
+            "quarterback": {"$ref": "#/$defs/rows"}
           }
         }
       }
     },
+    "nfl_pro": {"type": ["object", "null"], "description": "DRAFT until the NFL Pro exploration is done. Leave null."},
     "sumerbrain": {
       "type": "array",
-      "description": "Answers to the questions in private/notes/<week>_sumerbrain_questions.json. Each question asked twice.",
-      "items": {
-        "type": "object",
-        "required": ["claim_line", "question", "answer_1", "answer_2"],
-        "properties": {
-          "claim_line": {"type": "integer"},
-          "question": {"type": "string"},
-          "answer_1": {"type": "string"},
-          "answer_2": {"type": "string"},
-          "counts_given": {"type": "boolean"},
-          "consistent": {"type": "boolean"}
-        }
-      }
+      "items": {"type": "object", "required": ["claim_line", "question", "answer_1"],
+                "properties": {"claim_line": {"type": "integer"}, "question": {"type": "string"},
+                               "answer_1": {"type": "string"}, "answer_2": {"type": ["string", "null"]},
+                               "counts_given": {"type": "boolean"}, "consistent": {"type": ["boolean", "null"]}}}
     },
-    "missing_fields": {"type": "array", "items": {"type": "string"}, "description": "Dotted paths of every field left null"},
-    "raw_text_file": {"type": "string", "description": "Filename (in private/paid/) of the raw page text the numbers were copied from"},
+    "screenshot_fields": {"type": "array", "items": {"type": "string"},
+                          "description": "Dotted paths of values read from a screenshot because the page text dropped them. The checker can't trace these to raw text; it checks them for consistency instead."},
+    "missing_fields": {"type": "array", "items": {"type": "string"}},
+    "raw_text_file": {"type": "string"},
     "agent_notes": {"type": "string"}
   },
   "$defs": {
-    "pct": {"type": ["number", "null"], "minimum": 0, "maximum": 100, "description": "Percent as shown on the page (0-100), not a fraction"},
-    "distribution": {
+    "num": {"type": ["number", "null"]},
+    "row": {"type": ["object", "null"], "additionalProperties": {"type": ["number", "string", "null"]}},
+    "rows": {"type": ["array", "null"], "items": {"$ref": "#/$defs/row"}},
+    "dist": {
       "type": ["array", "null"],
-      "items": {
-        "type": "object",
-        "required": ["label", "count", "pct"],
-        "properties": {
-          "label": {"type": "string"},
-          "count": {"type": ["integer", "null"]},
-          "pct": {"$ref": "#/$defs/pct"}
+      "description": "A rate breakdown that should sum to ~100, e.g. personnel or run concepts",
+      "items": {"type": "object", "required": ["label", "pct"],
+                "properties": {"label": {"type": "string"}, "pct": {"$ref": "#/$defs/num"}}}
+    },
+    "splits": {
+      "type": ["array", "null"],
+      "description": "Passing/Rushing Performance tab: one row per bucket, e.g. Cover 3",
+      "items": {"type": "object", "required": ["label"],
+                "properties": {
+                  "label": {"type": "string"},
+                  "share_pct": {"$ref": "#/$defs/num"},
+                  "epa": {"$ref": "#/$defs/num"},
+                  "comp_pct": {"$ref": "#/$defs/num"},
+                  "comp": {"$ref": "#/$defs/num"}, "att": {"$ref": "#/$defs/num"},
+                  "yds": {"$ref": "#/$defs/num"}, "sacks": {"$ref": "#/$defs/num"},
+                  "yaco": {"$ref": "#/$defs/num"}
+                }}
+    },
+    "team_tab": {
+      "type": ["object", "null"],
+      "properties": {
+        "tendencies": {
+          "type": "object",
+          "properties": {
+            "offensive_personnel": {"$ref": "#/$defs/dist"},
+            "run_concepts": {"$ref": "#/$defs/dist"},
+            "run_pass_rate": {"$ref": "#/$defs/num"},
+            "play_action_rate": {"$ref": "#/$defs/num"},
+            "screen_rate": {"$ref": "#/$defs/num"},
+            "defensive_personnel": {"$ref": "#/$defs/dist"},
+            "man_rate": {"$ref": "#/$defs/num"},
+            "zone_rate": {"$ref": "#/$defs/num"},
+            "blitz_rate": {"$ref": "#/$defs/num"},
+            "pressure_rate": {"$ref": "#/$defs/num"},
+            "tfl_rate": {"$ref": "#/$defs/num"},
+            "missed_tackle_rate": {"$ref": "#/$defs/num"}
+          }
+        },
+        "pass_game": {
+          "type": "object",
+          "properties": {
+            "pass_yards": {"$ref": "#/$defs/num"},
+            "epa_per_play": {"$ref": "#/$defs/num"},
+            "avg_time_to_pressure": {"$ref": "#/$defs/num"},
+            "avg_time_to_throw": {"$ref": "#/$defs/num"},
+            "adot": {"$ref": "#/$defs/num"}
+          }
+        },
+        "passing": {
+          "type": "object",
+          "properties": {
+            "by_personnel": {"$ref": "#/$defs/splits"},
+            "by_coverage": {"$ref": "#/$defs/splits"},
+            "by_route": {"$ref": "#/$defs/splits"},
+            "pressure": {"$ref": "#/$defs/splits"},
+            "blitz": {"$ref": "#/$defs/splits"}
+          }
+        },
+        "run_game": {
+          "type": "object",
+          "properties": {
+            "attempts": {"$ref": "#/$defs/num"},
+            "rush_yards": {"$ref": "#/$defs/num"},
+            "yards_after_contact": {"$ref": "#/$defs/num"},
+            "epa_per_play": {"$ref": "#/$defs/num"}
+          }
+        },
+        "rushing": {
+          "type": "object",
+          "properties": {
+            "by_concept": {"$ref": "#/$defs/splits"},
+            "by_gap": {"$ref": "#/$defs/splits"},
+            "by_box": {"$ref": "#/$defs/splits"},
+            "by_personnel": {"$ref": "#/$defs/splits"}
+          }
         }
       }
     }

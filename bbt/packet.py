@@ -59,6 +59,50 @@ def _gameplan_table(cmp: pl.DataFrame, team: str) -> str:
     return md_table(pl.DataFrame(rows))
 
 
+SPLIT_COLS = ["label", "share_pct", "epa", "comp_pct", "comp", "att", "yds", "sacks", "yaco"]
+
+
+def _paid_section(ext: dict, team: str) -> str:
+    """Sūmer game page, Teams rows and Players tables as readable Markdown."""
+    out = []
+    s = ext.get("sumer") or {}
+    gp = s.get("game_page") or {}
+    opp = ext.get("opponent", "opp")
+    for side, title in (("nyg", f"{team} offense (Giants tab)"),
+                        ("opp", f"{opp} offense = what {team}'s defense faced ({opp} tab)")):
+        tab = gp.get(side)
+        if not tab:
+            continue
+        out.append(f"\n### {title}\n")
+        tend = tab.get("tendencies") or {}
+        for key in ("offensive_personnel", "run_concepts", "defensive_personnel"):
+            if tend.get(key):
+                out.append(f"\n**{key.replace('_', ' ').title()}**: " + ", ".join(
+                    f"{d['label']} {d['pct']}" for d in tend[key] if d.get("pct") is not None) + "\n")
+        scalars = {k: v for k, v in {**tend, **(tab.get("pass_game") or {}), **(tab.get("run_game") or {})}.items()
+                   if not isinstance(v, list)}
+        if scalars:
+            out.append("\n" + md_table(pl.DataFrame([{k: (None if v is None else str(v)) for k, v in scalars.items()}])))
+        for group in ("passing", "rushing"):
+            for key, rows in (tab.get(group) or {}).items():
+                if rows:
+                    df = pl.DataFrame(rows, infer_schema_length=None)
+                    cols = [c for c in SPLIT_COLS if c in df.columns and df[c].null_count() < df.height]
+                    out.append(f"\n**{group.title()}: {key.replace('_', ' ')}**\n\n" + md_table(df.select(cols)))
+    for key, title in (("teams_offense", f"Teams > Offense, {team} row"),
+                       ("teams_defense", f"Teams > Defense, {team} row")):
+        row = s.get(key)
+        if row:
+            out.append(f"\n### {title}\n\n" + md_table(pl.DataFrame(
+                [{"stat": k, "value": str(v)} for k, v in row.items()])))
+    for pos, rows in (s.get("players") or {}).items():
+        if rows:
+            df = pl.DataFrame([{k: (None if v is None else str(v)) for k, v in r.items()} for r in rows],
+                              infer_schema_length=None)
+            out.append(f"\n### Players: {pos.replace('_', ' ')}\n\n" + md_table(df))
+    return "".join(out)
+
+
 def build(week: int, team: str = config.TEAM, make_charts: bool = True) -> str:
     season = data.season_plays()
     baseline = data.baseline_plays()
@@ -175,7 +219,8 @@ def build(week: int, team: str = config.TEAM, make_charts: bool = True) -> str:
     else:
         w("```\n" + rep.render() + "\n```\n")
         ext = paid.load(week)
-        w("\n<details><summary>Extract</summary>\n\n```json\n" + json.dumps(
+        w(_paid_section(ext, team))
+        w("\n<details><summary>Raw extract</summary>\n\n```json\n" + json.dumps(
             {k: ext.get(k) for k in ("sumer", "nfl_pro", "sumerbrain", "missing_fields")}, indent=1)
           + "\n```\n</details>\n")
 
