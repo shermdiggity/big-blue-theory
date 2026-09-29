@@ -1,0 +1,15 @@
+[project]
+name = "big-blue-theory"
+version = "0.1.0"
+description = "Weekly, data-backed breakdown of the New York Giants"
+requires-python = ">=3.10"
+dependencies = ["nflreadpy>=0.1.5", "polars>=1.30", "duckdb>=1.2", "pyarrow>=15", "matplotlib>=3.8"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.setuptools]
+packages = ["bbt"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

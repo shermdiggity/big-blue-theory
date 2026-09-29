@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "big-blue-theory/paid_extract/v0",
+  "title": "Paid-data extract for one Giants game (DRAFT v0: finalize after ticket 8)",
+  "description": "What the browser agent returns after reading SumerPass and NFL Pro pages for ONE game. Every number is copied exactly from the page. Anything not on the page is null AND listed in missing_fields. The filled-in file lives in private/paid/ and is never committed.",
+  "type": "object",
+  "required": ["schema_version", "season", "week", "game_id", "team", "extracted_at", "sources", "sumer", "nfl_pro", "missing_fields", "raw_text_file"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": "v0"},
+    "season": {"type": "integer"},
+    "week": {"type": "integer"},
+    "game_id": {"type": "string", "pattern": "^\\d{4}_\\d{2}_[A-Z]{2,3}_[A-Z]{2,3}$"},
+    "team": {"const": "NYG"},
+    "extracted_at": {"type": "string", "description": "ISO timestamp"},
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["source", "page"],
+        "properties": {
+          "source": {"enum": ["sumer", "sumerbrain", "nfl_pro"]},
+          "page": {"type": "string", "description": "Page name / breadcrumb, not a URL with tokens"}
+        }
+      }
+    },
+    "sumer": {
+      "type": "object",
+      "required": ["offense", "defense", "players"],
+      "properties": {
+        "offense": {
+          "type": "object",
+          "properties": {
+            "snaps": {"type": ["integer", "null"]},
+            "personnel": {"$ref": "#/$defs/distribution"},
+            "formations": {"$ref": "#/$defs/distribution"},
+            "coverage_faced": {"$ref": "#/$defs/distribution"},
+            "pressure_rate_allowed": {"$ref": "#/$defs/pct"},
+            "pressures_allowed": {"type": ["integer", "null"]},
+            "blitz_rate_faced": {"$ref": "#/$defs/pct"},
+            "time_to_throw": {"type": ["number", "null"]}
+          }
+        },
+        "defense": {
+          "type": "object",
+          "properties": {
+            "snaps": {"type": ["integer", "null"]},
+            "personnel": {"$ref": "#/$defs/distribution"},
+            "coverage": {"$ref": "#/$defs/distribution"},
+            "man_rate": {"$ref": "#/$defs/pct"},
+            "zone_rate": {"$ref": "#/$defs/pct"},
+            "blitz_rate": {"$ref": "#/$defs/pct"},
+            "pressure_rate": {"$ref": "#/$defs/pct"},
+            "pressures": {"type": ["integer", "null"]}
+          }
+        },
+        "players": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "position"],
+            "properties": {
+              "name": {"type": "string"},
+              "position": {"type": "string"},
+              "snaps": {"type": ["integer", "null"]},
+              "routes": {"type": ["integer", "null"]},
+              "targets": {"type": ["integer", "null"]},
+              "pressures_allowed": {"type": ["integer", "null"]},
+              "pressures": {"type": ["integer", "null"]},
+              "coverage_snaps": {"type": ["integer", "null"]},
+              "targets_allowed": {"type": ["integer", "null"]}
+            }
+          }
+        }
+      }
+    },
+    "nfl_pro": {
+      "type": "object",
+      "properties": {
+        "run_scheme": {"$ref": "#/$defs/distribution"},
+        "designed_vs_actual_gap": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "object",
+            "required": ["designed", "actual", "count"],
+            "properties": {
+              "designed": {"type": "string"},
+              "actual": {"type": "string"},
+              "count": {"type": "integer"}
+            }
+          }
+        },
+        "passer": {
+          "type": ["object", "null"],
+          "properties": {
+            "name": {"type": "string"},
+            "time_to_throw": {"type": ["number", "null"]},
+            "avg_air_yards": {"type": ["number", "null"]},
+            "cpoe": {"type": ["number", "null"]},
+            "aggressiveness": {"$ref": "#/$defs/pct"}
+          }
+        },
+        "receivers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": {"type": "string"},
+              "avg_separation": {"type": ["number", "null"]},
+              "avg_cushion": {"type": ["number", "null"]},
+              "yac_above_expected": {"type": ["number", "null"]}
+            }
+          }
+        },
+        "rushers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": {"type": "string"},
+              "carries": {"type": ["integer", "null"]},
+              "rush_yards_over_expected": {"type": ["number", "null"]},
+              "efficiency": {"type": ["number", "null"]},
+              "eight_plus_box_rate": {"$ref": "#/$defs/pct"}
+            }
+          }
+        }
+      }
+    },
+    "sumerbrain": {
+      "type": "array",
+      "description": "Answers to the questions in private/notes/<week>_sumerbrain_questions.json. Each question asked twice.",
+      "items": {
+        "type": "object",
+        "required": ["claim_line", "question", "answer_1", "answer_2"],
+        "properties": {
+          "claim_line": {"type": "integer"},
+          "question": {"type": "string"},
+          "answer_1": {"type": "string"},
+          "answer_2": {"type": "string"},
+          "counts_given": {"type": "boolean"},
+          "consistent": {"type": "boolean"}
+        }
+      }
+    },
+    "missing_fields": {"type": "array", "items": {"type": "string"}, "description": "Dotted paths of every field left null"},
+    "raw_text_file": {"type": "string", "description": "Filename (in private/paid/) of the raw page text the numbers were copied from"},
+    "agent_notes": {"type": "string"}
+  },
+  "$defs": {
+    "pct": {"type": ["number", "null"], "minimum": 0, "maximum": 100, "description": "Percent as shown on the page (0-100), not a fraction"},
+    "distribution": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "object",
+        "required": ["label", "count", "pct"],
+        "properties": {
+          "label": {"type": "string"},
+          "count": {"type": ["integer", "null"]},
+          "pct": {"$ref": "#/$defs/pct"}
+        }
+      }
+    }
+  }
+}

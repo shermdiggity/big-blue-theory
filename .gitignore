@@ -1,0 +1,39 @@
+# ---------------------------------------------------------------
+# THIS REPO IS PUBLIC. Anything paid, personal, or bulky stays out.
+# ---------------------------------------------------------------
+
+# Everything private lives under private/ (paid extracts, raw page text,
+# Sunday notes, verdicts, game packets, charts built from paid data).
+private/*
+!private/README.md
+
+# Local data cache + database (rebuildable from nflverse in one command)
+data/
+*.duckdb
+*.duckdb.wal
+*.parquet
+
+# Secrets / logins. Never commit these.
+.env
+.env.*
+*.cookie
+*.cookies
+cookies*.json
+storage_state*.json
+*.har
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
