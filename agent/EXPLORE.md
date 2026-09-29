@@ -3,8 +3,9 @@
 Paste everything below the line into Claude in Chrome, with the user already logged into
 sumersports.com (SūmerPass) and pro.nfl.com (NFL+ Premium) in the same Chrome profile.
 
-**Run it in two sittings, one site each** (e.g. Sūmer one evening, NFL Pro the next). Replace
-`SITE FOR THIS RUN` below with `SūmerPass` or `NFL Pro`. Watch the first run so you can stop it.
+**Run it once per site, back to back is fine** (the sites don't share anything, so the caps are
+per site). Separate runs just keep each report focused. Replace `SITE FOR THIS RUN` below with
+`SūmerPass` or `NFL Pro`. Watch the first run so you can stop it.
 Paste Claude's final reply back into the Claude Code session. It turns that into
 `docs/paid_fields.md` and the final `agent/paid_extract.schema.json`.
 
