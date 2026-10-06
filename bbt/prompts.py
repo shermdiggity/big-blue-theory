@@ -19,7 +19,7 @@ import json
 import re
 from datetime import datetime
 
-from bbt import config, data
+from bbt import config, data, notes
 
 RULES = """RULES (follow exactly; my paid accounts depend on it)
 - Read only. Never click export, download, share, settings, account, billing or upgrade. Never log in or out or type credentials.
@@ -49,8 +49,12 @@ Background tabs don't take clicks: work in the visible tab. The scoreboard strip
 5. Next Gen Stats -> Team Defense, Week {week}: NYG row of Pass Defense and Run Defense. Then Team Offense: NYG row of Passing, Rushing, Receiving. -> "ngs_team_defense", "ngs_team_offense".
 6. Game -> Insights: copy each card's text verbatim -> "insights"."""
 
-SUMERBRAIN = """SŪMERBRAIN (after the route, only if under the caps)
-Ask each question exactly as written in a NEW chat, then again in another new chat. Record both answers verbatim. Don't interpret or average them.
+SUMERBRAIN = """SŪMERBRAIN (always do this part; chat messages don't count toward the page-load cap)
+These are things the tables can't answer. Budget about 45 minutes; if you run out, stop and send what you have. For each question:
+- Open a NEW SūmerBrain chat, paste the question exactly (everything after the [bracketed label]; the label is only for my records, don't paste it), and wait for the full answer.
+- Then open another new chat and ask it again, word for word. Wait 10 seconds between questions.
+- Copy both answers verbatim (trim boilerplate). Note whether they gave raw counts and whether the two answers agree on the numbers.
+- Don't interpret, merge or average the answers. If it errors, wait 30 seconds and try once more, then move on.
 {questions}"""
 
 SUMER_SKELETON = {
@@ -96,7 +100,7 @@ NFLPRO_SKELETON = {
 }
 
 COMMON_TAIL = {
-    "sumerbrain": [{"question": "...", "answer_1": "...", "answer_2": "...", "counts_given": True, "consistent": True}],
+    "sumerbrain": [{"claim": "the [bracketed claim] before the question", "question": "...", "answer_1": "...", "answer_2": "...", "counts_given": True, "consistent": True}],
     "extra_asks": [{"ask": "...", "answer": "verbatim from the page"}],
     "screenshot_fields": [], "missing_fields": [], "agent_notes": "",
     "usage": {"page_loads": 0, "clicks": 0, "minutes": 0},
@@ -117,13 +121,54 @@ def _section(path, name: str) -> str:
     return m.group(1).strip() if m else ""
 
 
+def _matchup(week: int) -> str:
+    gid = data.game_id_for(week)
+    _, _, away, home = gid.split("_")
+    return f"{away} at {home}"
+
+
+def _questions_block(questions) -> str:
+    return SUMERBRAIN.format(questions="\n".join(
+        f"{i}. [{q.get('claim', 'extra')}] {q['question']}" for i, q in enumerate(questions, 1)))
+
+
+SUMERBRAIN_ONLY_SKELETON = {
+    "site": "sumerbrain",
+    "sumerbrain": [{"claim": "the [bracketed claim] before the question", "question": "...",
+                    "answer_1": "...", "answer_2": "...", "counts_given": True, "consistent": True}],
+    "agent_notes": "", "usage": {"chats": 0, "minutes": 0},
+}
+
+
+def build_sumerbrain(week: int) -> str | None:
+    """Standalone SūmerBrain prompt for claims still open after the table runs."""
+    tag = config.week_tag(week)
+    questions = notes.open_claim_questions(week, f"the {config.SEASON} Week {week} game {_matchup(week)}")
+    if not questions:
+        return None
+    text = "\n\n".join([
+        f"You're helping me check my notes on one New York Giants game: {data.game_id_for(week)} "
+        f"(Week {week}, {config.SEASON}), NYG vs {data.opponent_for(week)}. I'm logged into SūmerPass already. "
+        "This run is SūmerBrain (Sūmer's AI chat) only. Don't browse any other pages.",
+        "RULES: read only, one tab, never change settings or account pages, never type credentials. "
+        "CAPTCHA, 'unusual activity', rate-limit message or forced logout: stop and tell me.",
+        _questions_block(questions),
+        REPLY.format(skeleton=json.dumps(SUMERBRAIN_ONLY_SKELETON, ensure_ascii=False)).replace(
+            "2. ```text with the raw page text of every page and panel you read, each starting with a line \"=== <breadcrumb> ===\".",
+            "2. ```text with both answers to every question, verbatim, each starting with \"=== <question number> ===\"."),
+    ]) + "\n"
+    path = config.PRIVATE_DIR / "prompts" / f"{tag}_3_sumerbrain.txt"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    return str(path)
+
+
 def build(week: int) -> tuple[str, str]:
     tag = config.week_tag(week)
     game_id = data.game_id_for(week)
     opp = data.opponent_for(week)
     asks_path = config.NOTES_DIR / f"{tag}_asks.md"
-    qpath = config.NOTES_DIR / f"{tag}_sumerbrain_questions.json"
-    questions = json.loads(qpath.read_text()) if qpath.exists() else []
+    questions = notes.open_claim_questions(week, f"the {config.SEASON} Week {week} game {_matchup(week)}")
 
     header = (f"You're helping me pull paid charting data for one New York Giants game: {game_id} "
               f"(Week {week}, {config.SEASON}), NYG vs {opp}. I'm logged in already.\n")
@@ -137,7 +182,7 @@ def build(week: int) -> tuple[str, str]:
         if extras:
             parts.append("EXTRA ASKS FOR THIS GAME (still within the caps; answers go in \"extra_asks\")\n" + extras)
         if n == "1_sumer" and questions:
-            parts.append(SUMERBRAIN.format(questions="\n".join(f"{i}. {q['question']}" for i, q in enumerate(questions, 1))))
+            parts.append(_questions_block(questions))
         skeleton = {**skel, **COMMON_TAIL}
         if n != "1_sumer":
             skeleton = {k: v for k, v in skeleton.items() if k != "sumerbrain"}
@@ -170,15 +215,22 @@ def ingest(week: int, reply_text: str) -> str:
         "screenshot_fields": [], "raw_text_file": rpath.name, "sumerbrain": [], "extra_asks": [], "agent_notes": "",
     }
     ext["extracted_at"] = datetime.now().isoformat(timespec="seconds")
-    ext[site] = part.get(site)
-    ext["missing_fields"] = [m for m in ext.get("missing_fields", []) if m != site] + part.get("missing_fields", [])
-    ext["screenshot_fields"] = ext.get("screenshot_fields", []) + part.get("screenshot_fields", [])
-    ext["sources"] = [s for s in ext.get("sources", []) if s.get("source") != site] + [{"source": site, "page": "see raw text"}]
-    for qa in part.get("sumerbrain") or []:
-        qa.setdefault("claim_line", 0)
-        ext.setdefault("sumerbrain", []).append(qa)
-    for a in part.get("extra_asks") or []:
-        ext.setdefault("extra_asks", []).append({**a, "site": site})
+    sb = part.get("sumerbrain") or []
+    if site != "sumerbrain":
+        ext[site] = part.get(site)
+        ext["missing_fields"] = [m for m in ext.get("missing_fields", []) if m != site] + part.get("missing_fields", [])
+        ext["screenshot_fields"] = ext.get("screenshot_fields", []) + part.get("screenshot_fields", [])
+        ext["sources"] = [s for s in ext.get("sources", []) if s.get("source") != site] + [{"source": site, "page": "see raw text"}]
+        for a in part.get("extra_asks") or []:
+            ext.setdefault("extra_asks", []).append({**a, "site": site})
+    # SūmerBrain answers: replace any earlier answer to the same claim, then file them on the claims
+    asked = {qa.get("claim") for qa in sb}
+    ext["sumerbrain"] = [q for q in ext.get("sumerbrain") or [] if q.get("claim") not in asked] + sb
+    answers = {qa["claim"]: {k: qa.get(k) for k in ("question", "answer_1", "answer_2", "counts_given", "consistent")}
+               for qa in sb if qa.get("claim") and qa["claim"] != "extra"}
+    unmatched = []
+    if answers and (config.NOTES_DIR / f"{tag}_verdicts.csv").exists():
+        unmatched = notes.record_sumerbrain(week, answers)
     if part.get("agent_notes"):
         ext["agent_notes"] = (ext.get("agent_notes", "") + f"\n[{site}] " + part["agent_notes"]).strip()
     ext.setdefault("usage", {})[site] = part.get("usage")
@@ -187,4 +239,9 @@ def ingest(week: int, reply_text: str) -> str:
     old = rpath.read_text() if rpath.exists() else ""
     old = re.sub(rf"##### {site} #####.*?(?=##### |\Z)", "", old, flags=re.S)
     rpath.write_text(old + f"##### {site} #####\n{raw}\n")
-    return f"merged {site} into {jpath.name}"
+    msg = f"merged {site} into {jpath.name}"
+    if answers:
+        msg += f"; {len(answers)} SūmerBrain answers filed on claims"
+    if unmatched:
+        msg += f"; couldn't match: {unmatched}"
+    return msg

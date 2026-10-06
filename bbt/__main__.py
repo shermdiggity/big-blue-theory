@@ -1,7 +1,8 @@
 """Command line: `python -m bbt <command>`.
 
   brief N              THE NOTES DOC to write from (private/briefs/), builds the packet too
-  prompts N            the two Claude in Chrome prompts (Sūmer, NFL Pro) for week N
+  prompts N            the two Claude in Chrome prompts (Sūmer + SūmerBrain, NFL Pro) for week N
+  prompts N --sumerbrain-only   one prompt: SūmerBrain questions for every claim still open
   ingest N FILE        merge a pasted Claude in Chrome reply into week N's paid data
   ingest-raw N FILE    build week N's paid data from pasted page text (when there's no JSON block)
   refresh              re-download nflverse data into data/bbt.duckdb
@@ -46,6 +47,9 @@ def cmd_week(a):
 
 def cmd_prompts(a):
     from bbt import prompts
+    if a.sumerbrain_only:
+        print(prompts.build_sumerbrain(a.week) or "No open claims: nothing to ask SūmerBrain.")
+        return
     for path in prompts.build(a.week):
         print(path)
 
@@ -107,8 +111,8 @@ def cmd_notes(a):
             print(f"   {ev}: {val}")
         if c.needs_paid:
             print(f"   needs Sūmer/film: {', '.join(c.needs_paid)}")
-    v, q = notes.write_verdicts(claims, a.week, a.source)
-    print(f"\nFill in verdicts: {v}\nSūmerBrain questions: {q}")
+    v, _ = notes.write_verdicts(claims, a.week, a.source)
+    print(f"\nFill in verdicts: {v}\nOpen claims go to SūmerBrain via `bbt prompts {a.week}`.")
 
 
 def cmd_eye(_):
@@ -195,7 +199,11 @@ def main(argv=None):
     s = sub.add_parser("notes"); s.add_argument("week", type=int)
     s.add_argument("--source", default="me", help="whose notes: me (default) or e.g. skinner")
     s.set_defaults(fn=cmd_notes)
-    for name, fn in [("run", cmd_run), ("check", cmd_check), ("prompts", cmd_prompts),
+    s = sub.add_parser("prompts"); s.add_argument("week", type=int)
+    s.add_argument("--sumerbrain-only", action="store_true",
+                   help="just the SūmerBrain prompt for claims still open (after the table runs)")
+    s.set_defaults(fn=cmd_prompts)
+    for name, fn in [("run", cmd_run), ("check", cmd_check),
                      ("brief", cmd_brief), ("opponent", cmd_opponent), ("grade", cmd_grade)]:
         s = sub.add_parser(name); s.add_argument("week", type=int); s.set_defaults(fn=fn)
     s = sub.add_parser("watchfor"); s.add_argument("week", type=int)

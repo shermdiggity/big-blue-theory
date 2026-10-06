@@ -245,25 +245,75 @@ def check(claims: list[Claim], game: pl.DataFrame, team: str = config.TEAM) -> l
     return claims
 
 
-def sumerbrain_questions(claims: list[Claim], game_label: str) -> list[dict]:
-    """Guardrailed questions for SūmerBrain, only for evidence free data couldn't answer.
+def _claim_question(who: str, what: str, evidence: str, game_label: str) -> str:
+    ev = f" Focus on: {evidence}." if evidence else ""
+    return (f"For {game_label} only. Claim from my notes: \"{who}: {what}\".{ev} "
+            f"Does your charting of this game support it? Answer with specific numbers: raw counts "
+            f"with their definitions (e.g. '7 of 31 dropbacks, where a pressure = ...'), and list the "
+            f"specific plays (quarter + clock) that support or contradict it. Use only this game's snaps.")
 
-    Each question gets an explicit definition, asks for the counts behind any percentage,
-    and is meant to be asked twice (the agent does this). Different answers = unreliable.
+
+def sumerbrain_questions(claims: list[Claim], game_label: str) -> list[dict]:
+    """A SūmerBrain question for every claim free data couldn't settle on its own.
+
+    Nothing gets dropped for being unverifiable: it goes to SūmerBrain. Each question asks for
+    definitions, raw counts and the specific plays, and gets asked twice (different answers
+    = unreliable). Answers are kept and labeled as SūmerBrain's, not treated as verified.
     """
-    qs = []
-    for c in claims:
-        for ev in c.needs_paid:
-            qs.append({
-                "claim_line": c.line_no,
-                "question": (
-                    f"For {game_label} only: {ev} for {c.who}. Define it explicitly: say exactly "
-                    f"what counts in the numerator and denominator. Give the raw counts (e.g. "
-                    f"'7 of 31 dropbacks'), not only a percentage. Only use this game's snaps."
-                ),
-                "ask_twice": True,
-            })
-    return qs
+    return [{"claim": f"{c.who}: {c.what}", "claim_line": c.line_no, "ask_twice": True,
+             "question": _claim_question(c.who, c.what, ", ".join(c.needs_paid), game_label)}
+            for c in claims if c.needs_paid]
+
+
+def open_claim_questions(week: int, game_label: str, source: str = "me") -> list[dict]:
+    """Questions for every claim still open after the data (verdict can't check / mixed / blank)
+    plus any hand-written question in <tag>_sumerbrain_questions.json (e.g. the questions inside
+    the user's notes), skipping claims SūmerBrain already answered. Hand-written ones win."""
+    tag = config.week_tag(week) + ("" if source == "me" else f"_{source}")
+    vpath = config.NOTES_DIR / f"{tag}_verdicts.csv"
+    custom_path = config.NOTES_DIR / f"{tag}_sumerbrain_questions.json"
+    custom = json.loads(custom_path.read_text()) if custom_path.exists() else []
+    by_claim = {q.get("claim", "").lower(): q for q in custom if q.get("claim")}
+    out = []
+    if vpath.exists():
+        for r in csv.DictReader(vpath.open()):
+            claim = f"{r['who']}: {r['what']}"
+            if r.get("sumerbrain"):
+                continue
+            custom_q = by_claim.pop(claim.lower(), None)
+            open_ = (r.get("verdict") or "") in ("can't check", "mixed", "")
+            if not (open_ or custom_q):
+                continue
+            q = custom_q or {
+                "claim": claim, "ask_twice": True,
+                "question": _claim_question(r["who"], r["what"], r.get("needs_paid_or_film", ""), game_label)}
+            out.append(q)
+    out += list(by_claim.values())  # custom questions not tied to an open claim
+    return out
+
+
+def record_sumerbrain(week: int, answers: dict[str, dict], source: str = "me") -> list[str]:
+    """Store SūmerBrain answers on their claims (matched by "who: start of claim").
+    answers = {"Ricard: lots of runs": {"answer_1": ..., "answer_2": ..., "consistent": bool}}"""
+    tag = config.week_tag(week) + ("" if source == "me" else f"_{source}")
+    path = config.NOTES_DIR / f"{tag}_verdicts.csv"
+    rows = list(csv.DictReader(path.open()))
+    fields = list(rows[0].keys()) + ([] if "sumerbrain" in rows[0] else ["sumerbrain"])
+    unmatched = []
+    for key, a in answers.items():
+        who, _, what = key.partition(":")
+        hits = [r for r in rows if r["who"].lower().startswith(who.strip().lower())
+                and r["what"].lower().startswith(what.strip().lower())]
+        if len(hits) != 1:
+            unmatched.append(f"{key} ({len(hits)} matches)")
+            continue
+        hits[0]["sumerbrain"] = json.dumps(a, ensure_ascii=False)
+    with path.open("w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fields)
+        w.writeheader()
+        for r in rows:
+            w.writerow({k: r.get(k, "") for k in fields})
+    return unmatched
 
 
 def notes_path(week: int, source: str = "me"):
@@ -282,7 +332,7 @@ def write_verdicts(claims: list[Claim], week: int, source: str = "me") -> tuple[
             for r in csv.DictReader(f):
                 existing[(r["who"], r["what"])] = r
     fields = ["line", "type", "who", "what", "evidence_asked", "free_evidence", "needs_paid_or_film",
-              "paid_evidence", "verdict", "comment"]
+              "paid_evidence", "verdict", "comment", "sumerbrain"]
     with path.open("w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
@@ -296,10 +346,11 @@ def write_verdicts(claims: list[Claim], week: int, source: str = "me") -> tuple[
                 "paid_evidence": old.get("paid_evidence", ""),
                 "verdict": old.get("verdict", ""),
                 "comment": old.get("comment", ""),
+                "sumerbrain": old.get("sumerbrain", ""),
             })
-    qpath = config.NOTES_DIR / f"{tag}_sumerbrain_questions.json"
-    qpath.write_text(json.dumps(sumerbrain_questions(claims, f"week {week} ({config.SEASON})"), indent=2))
-    return str(path), str(qpath)
+    # SūmerBrain questions are built from the open claims when the prompts are made
+    # (bbt prompts N), so hand-written ones in <tag>_sumerbrain_questions.json are never overwritten.
+    return str(path), str(config.NOTES_DIR / f"{tag}_sumerbrain_questions.json")
 
 
 def record_verdicts(week: int, verdicts: dict[str, tuple[str, str]], source: str = "me") -> list[str]:

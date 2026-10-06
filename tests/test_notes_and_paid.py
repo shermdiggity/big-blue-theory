@@ -166,3 +166,19 @@ def test_ingest_merges_sites(tmp_path, monkeypatch):
     assert ext["missing_fields"] == []
     raw = (tmp_path / "2026_wk04_raw.txt").read_text()
     assert raw.count("##### sumer #####") == 1 and "##### nfl_pro #####" in raw
+
+
+def test_open_claims_go_to_sumerbrain_and_answers_are_filed(tmp_path, monkeypatch):
+    from bbt import config
+    monkeypatch.setattr(config, "NOTES_DIR", tmp_path)
+    claims = notes.parse("A | open thing | separation\nB | settled thing | targets\nC | asked thing | targets\n")
+    notes.write_verdicts(claims, 4)
+    notes.record_verdicts(4, {"A: open": ("can't check", ""), "B: settled": ("supported", "5 of 6"),
+                              "C: asked": ("supported", "x")})
+    (tmp_path / "2026_wk04_sumerbrain_questions.json").write_text(json.dumps(
+        [{"claim": "C: asked thing", "question": "why C?"}]))
+    qs = notes.open_claim_questions(4, "game")
+    assert [q["claim"] for q in qs] == ["A: open thing", "C: asked thing"]   # B is settled, not asked
+    assert qs[1]["question"] == "why C?"
+    notes.record_sumerbrain(4, {"A: open": {"answer_1": "7 of 9", "answer_2": "7 of 9", "consistent": True}})
+    assert [q["claim"] for q in notes.open_claim_questions(4, "game")] == ["C: asked thing"]  # answered drops out

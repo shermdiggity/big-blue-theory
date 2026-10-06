@@ -21,7 +21,7 @@ import polars as pl
 
 from bbt import config, data, erased, gameplan, opponent, packet, paid, penalties, swing
 
-ICON = {"supported": "✅", "contradicted": "❌", "mixed": "🟡", "can't check": "❔", "": "⬜"}
+ICON = {"sumerbrain": "🧠", "supported": "✅", "contradicted": "❌", "mixed": "🟡", "can't check": "❔", "": "⬜"}
 
 
 def _pct(v):
@@ -51,8 +51,18 @@ def _notes_section(tag: str) -> list[str]:
                 out.append(f"{r['comment']}  \n")
             if r.get("paid_evidence"):
                 out.append(f"Paid data: {r['paid_evidence']}  \n")
-            if r.get("needs_paid_or_film") and not r.get("paid_evidence"):
-                out.append(f"_Still open: {r['needs_paid_or_film']}_  \n")
+            if r.get("sumerbrain"):
+                a = json.loads(r["sumerbrain"])
+                tag_ = ("asked twice, answers agree" if a.get("consistent") else
+                        "**answers differ between asks: treat as unreliable**" if a.get("answer_2") else "asked once")
+                counts = "" if a.get("counts_given") else ", no raw counts given"
+                out.append(f"> 🧠 **SūmerBrain** ({tag_}{counts}; Sūmer's charting, not verified against tables): "
+                           f"{a.get('answer_1', '')}  \n")
+                if a.get("answer_2") and not a.get("consistent"):
+                    out.append(f"> 🧠 second ask: {a['answer_2']}  \n")
+            elif (r.get("verdict") in ("can't check", "mixed", "") or r.get("needs_paid_or_film")) \
+                    and not r.get("paid_evidence"):
+                out.append(f"_Open: sent to SūmerBrain (`bbt prompts --sumerbrain-only`)._  \n")
     if not found:
         out.append("_No notes for this week yet. Send them over in the usual `who | what | evidence` style "
                    "(or just as bullet points) and they get checked._\n")
