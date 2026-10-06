@@ -34,9 +34,10 @@ def _extract(**over):
                 "nyg": {
                     "tendencies": {"offensive_personnel": [{"label": "11", "pct": 60.0}, {"label": "12", "pct": 40.0}]},
                     "passing": {
-                        "by_coverage": [{"label": "Cover 1", "share_pct": 40.0, "att": 8, "sacks": 1},
-                                        {"label": "Cover 3", "share_pct": 60.0, "att": 12, "sacks": 1}],
-                        "pressure": [{"label": "Pressured", "share_pct": 30.0, "att": 6, "sacks": 2},
+                        # Sūmer convention: att excludes sacks; share % is of dropbacks (att + sacks)
+                        "by_coverage": [{"label": "Cover 1", "share_pct": 40.0, "att": 7, "sacks": 1},
+                                        {"label": "Cover 3", "share_pct": 60.0, "att": 11, "sacks": 1}],
+                        "pressure": [{"label": "Pressured", "share_pct": 30.0, "att": 4, "sacks": 2},
                                      {"label": "Clean", "share_pct": 70.0, "att": 14, "sacks": 0}],
                     },
                 },
@@ -52,8 +53,8 @@ def _extract(**over):
     return base
 
 
-RAW = ("Personnel 11 60.0 12 40.0 Cover 1 40.0% 8 att 1 sack Cover 3 60.0% 12 att 1 "
-       "Pressured 30.0% 6 2 Clean 70.0% 14 0 Plays 50 Pressure % 31.5 Blitz % 22.2 A Guard Pressure 2")
+RAW = ("Personnel 11 60.0 12 40.0 Cover 1 40.0% 7 att 1 sack Cover 3 60.0% 11 att 1 "
+       "Pressured 30.0% 4 2 Clean 70.0% 14 0 Plays 50 Pressure % 31.5 Blitz % 22.2 A Guard Pressure 2")
 FREE = paid.FreeCounts(off_plays=50, pass_att=20, sacks_taken=2, rushes=28, opp_pass_att=30,
                        opp_rushes=20, sacks_made=1)
 
@@ -78,9 +79,9 @@ def test_bad_distribution_fails():
 
 def test_share_not_matching_counts_warns():
     ex = _extract()
-    ex["sumer"]["game_page"]["nyg"]["passing"]["pressure"][0]["att"] = 9  # 9/23 != 30%
+    ex["sumer"]["game_page"]["nyg"]["passing"]["pressure"][0]["att"] = 9  # (9+2)/25 != 30%
     r = paid.check(ex, RAW + " 9", 3, "2026_03_TEN_NYG", FREE)
-    assert any("att =" in w for w in r.warnings)
+    assert any("plays =" in w for w in r.warnings)
     assert any("disagree on total" in w for w in r.warnings)
 
 
@@ -116,9 +117,9 @@ def test_nfl_pro_consistency_and_cross_source():
     ex["nfl_pro"] = {
         "game_stats": {"passing": [{"Player": "QB A", "QBP": 4}, {"Player": "QB B", "QBP": 5}]},
         "film_room": {"all_plays": 100, "pressure_plays": 10},
-        "personnel": [{"team": "NYG", "personnel": "ALL", "plays": 60},
-                      {"team": "NYG", "personnel": "1 RB, 1 TE, 3 WR", "plays": 30},
-                      {"team": "NYG", "personnel": "1 RB, 2 TE, 2 WR", "plays": 20}],
+        "personnel": [{"team": "NYG", "personnel": "ALL", "plays": 60, "play_type_filter": "pass+run"},
+                      {"team": "NYG", "personnel": "1 RB, 1 TE, 3 WR", "plays": 30, "play_type_filter": "pass+run"},
+                      {"team": "NYG", "personnel": "1 RB, 2 TE, 2 WR", "plays": 20, "play_type_filter": "pass+run"}],
         "ngs_team_defense": {"pass_defense": {"Blitz %": "25.0%"}},
     }
     raw = RAW + " QBP 4 5 100 10 60 30 20 25.0%"

@@ -102,8 +102,8 @@ COMMON_TAIL = {
     "usage": {"page_loads": 0, "clicks": 0, "minutes": 0},
 }
 
-REPLY = """REPLY FORMAT
-Send exactly two code blocks and nothing else of substance:
+REPLY = """REPLY FORMAT (important: the JSON block is required, not optional)
+Send exactly two code blocks and nothing else of substance. If you're short on space, the JSON block comes first and is the one that must be complete:
 1. ```json with this shape (keep these keys; fill in what the pages show; tables as "column label": "value as shown"):
 {skeleton}
 2. ```text with the raw page text of every page and panel you read, each starting with a line "=== <breadcrumb> ===".

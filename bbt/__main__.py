@@ -3,6 +3,7 @@
   brief N              THE NOTES DOC to write from (private/briefs/), builds the packet too
   prompts N            the two Claude in Chrome prompts (Sūmer, NFL Pro) for week N
   ingest N FILE        merge a pasted Claude in Chrome reply into week N's paid data
+  ingest-raw N FILE    build week N's paid data from pasted page text (when there's no JSON block)
   refresh              re-download nflverse data into data/bbt.duckdb
   week N               build the game packet for week N (private/packets/)
   run N                refresh + check paid extract + packet, timed (ticket 16)
@@ -52,6 +53,11 @@ def cmd_prompts(a):
 def cmd_ingest(a):
     from bbt import prompts
     print(prompts.ingest(a.week, open(a.file).read()))
+
+
+def cmd_ingest_raw(a):
+    from bbt import rawparse
+    print(rawparse.ingest_raw(a.week, a.file))
 
 
 def cmd_brief(a):
@@ -199,6 +205,8 @@ def main(argv=None):
     s.set_defaults(fn=cmd_watchfor)
     s = sub.add_parser("ingest"); s.add_argument("week", type=int); s.add_argument("file")
     s.set_defaults(fn=cmd_ingest)
+    s = sub.add_parser("ingest-raw"); s.add_argument("week", type=int); s.add_argument("file")
+    s.set_defaults(fn=cmd_ingest_raw)
     sub.add_parser("eye").set_defaults(fn=cmd_eye)
     sub.add_parser("erased").set_defaults(fn=cmd_erased)
     sub.add_parser("audit").set_defaults(fn=cmd_audit)

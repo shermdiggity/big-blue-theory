@@ -18,7 +18,10 @@ post from one notes doc. Everything else is this session's job. Keep it that sim
      paid tables can't answer.
    - `python -m bbt prompts N` and give the user the two files in `private/prompts/`. That's all they paste.
 2. **User pastes the two extension replies.** Save each to the scratchpad, `python -m bbt ingest N <file>`,
-   then `python -m bbt check N`. Update the verdicts that were waiting on paid data.
+   then `python -m bbt check N`. If they pasted page text with no JSON block, save the text as
+   `private/paid/<tag>_raw.txt` (Sūmer first, then a `##### nfl_pro #####` line, then NFL Pro) and run
+   `python -m bbt ingest-raw N private/paid/<tag>_raw.txt`. Update the verdicts that were waiting on paid data.
+   Sūmer conventions: split "comp/att" excludes sacks, share % is of dropbacks (att + sacks).
 3. `python -m bbt brief N` → `private/briefs/<tag>.md`, the doc they write from (it also builds the
    packet and charts). Send it with SendUserFile.
 4. Ask for next week's watch-for and log it: `python -m bbt watchfor N+1 --metric … --over|--under …`.

@@ -162,19 +162,23 @@ def check(extract: dict, raw_text: str | None, week: int, game_id: str,
         shares = [x.get("share_pct") for x in rows if x.get("share_pct") is not None]
         if shares and abs(sum(shares) - 100) > PCT_SUM_TOLERANCE and not path.endswith("by_route"):
             r.errors.append(f"`{path}` shares sum to {sum(shares):.1f}, not ~100")
-        att_total = _total(rows, "att")
-        if att_total:
+        # Sūmer passing splits: "comp/att" excludes sacks, but the share % is of dropbacks
+        # (att + sacks). Rushing splits have no sacks, so this is plain att there.
+        def plays(x):
+            return (x.get("att") or 0) + (x.get("sacks") or 0)
+        att_total = sum(plays(x) for x in rows if x.get("att") is not None)
+        if att_total and not path.endswith("by_route"):  # routes leave out unlabeled throws
             side_group = path.rsplit(".", 1)[0]
             totals.setdefault(side_group, {})[path.rsplit(".", 1)[1]] = att_total
             for i, x in enumerate(rows):
                 if x.get("share_pct") is not None and x.get("att") is not None:
-                    implied = 100 * x["att"] / att_total
+                    implied = 100 * plays(x) / att_total
                     if abs(implied - x["share_pct"]) > SHARE_TOLERANCE:
                         r.warnings.append(f"`{path}[{i}]` ({x['label']}): share {x['share_pct']}% but "
-                                          f"{x['att']}/{att_total} att = {implied:.1f}%")
+                                          f"{plays(x)}/{att_total} plays = {implied:.1f}%")
     for side_group, by_key in totals.items():
         if len(set(by_key.values())) > 1:
-            r.warnings.append(f"`{side_group}` split tables disagree on total attempts: {by_key}")
+            r.warnings.append(f"`{side_group}` split tables disagree on total plays: {by_key}")
 
     if free:
         _free_checks(extract, free, totals, r)
@@ -208,6 +212,7 @@ def check(extract: dict, raw_text: str | None, week: int, game_id: str,
 
 def _free_checks(extract: dict, free: FreeCounts, totals: dict, r: Report) -> None:
     def warn_if(label, paid, freev, tol=1):
+        paid = _num(paid)
         if paid is not None and freev is not None and abs(paid - freev) > tol:
             r.warnings.append(f"{label}: Sūmer {paid} vs free play-by-play {freev}")
 
@@ -219,9 +224,9 @@ def _free_checks(extract: dict, free: FreeCounts, totals: dict, r: Report) -> No
     nyg_rush = totals.get("sumer.game_page.nyg.rushing", {})
     opp_rush = totals.get("sumer.game_page.opp.rushing", {})
     if nyg_pass:
-        warn_if("NYG pass attempts (game page splits)", max(nyg_pass.values()), free.pass_att)
+        warn_if("NYG dropbacks (game page splits, att + sacks)", max(nyg_pass.values()), free.pass_att)
     if opp_pass:
-        warn_if(f"{extract['opponent']} pass attempts (game page splits)", max(opp_pass.values()), free.opp_pass_att)
+        warn_if(f"{extract['opponent']} dropbacks (game page splits, att + sacks)", max(opp_pass.values()), free.opp_pass_att)
     if nyg_rush:
         warn_if("NYG rush attempts (game page splits)", max(nyg_rush.values()), free.rushes, tol=2)
     if opp_rush:
@@ -253,6 +258,9 @@ def _nfl_pro_checks(np_: dict, r: Report) -> None:
                           f"on the Stats tab {sum(qbp):.0f}")
     by_team: dict[str, dict] = {}
     for row in np_.get("personnel") or []:
+        # With Play Type = All, "ALL" includes kickoffs/punts that have no personnel grouping.
+        if str(row.get("play_type_filter", "")).lower() in ("all", "none", ""):
+            continue
         by_team.setdefault(row["team"], {})[row["personnel"]] = row.get("plays")
     for team, d in by_team.items():
         total = d.get("ALL")
@@ -289,8 +297,23 @@ def cross_source(extract: dict) -> list[dict]:
     """Where Sūmer and NFL Pro measure the same thing, side by side. Disagreement is content,
     not an error: they chart independently. Big gaps are worth a sentence in the post."""
     rows = []
+    qb_rows = ((_dig(extract, ("nfl_pro", "game_stats", "passing"))) or [])
+    team = extract.get("team", config.TEAM)
+
+    def qb_col(nyg_qb: bool, col: str):
+        """Fallback when the NGS team pages weren't read: the QB rows on the game Stats tab.
+        The opponent QB's row describes NYG's defense (blitz faced, pressures, TTT)."""
+        for row in qb_rows:
+            is_nyg = f"({team})" in str(row.get("Player", "")) or row.get("Team") == team
+            if is_nyg == nyg_qb and row.get(col) is not None:
+                return _num(row.get(col))
+        return None
+    fallback = {"NYG defense blitz rate": (False, "Blitz %"), "NYG defense pressure rate": (False, "QBP %"),
+                "Opponent time to throw": (False, "TTT"), "NYG QB time to throw": (True, "TTT")}
     for label, sp, npp in CROSS:
         a, b = _num(_dig(extract, sp)), _num(_dig(extract, npp))
+        if b is None and label in fallback:
+            b = qb_col(*fallback[label])
         if a is not None or b is not None:
             rows.append({"measure": label, "sumer": a, "nfl_pro": b,
                          "gap": None if a is None or b is None else round(b - a, 2)})
