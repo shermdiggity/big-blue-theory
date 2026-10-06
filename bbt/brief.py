@@ -19,7 +19,7 @@ import json
 
 import polars as pl
 
-from bbt import config, data, erased, gameplan, opponent, packet, paid, penalties, swing
+from bbt import config, data, erased, gameplan, notes, opponent, packet, paid, penalties, swing
 
 ICON = {"sumerbrain": "🧠", "supported": "✅", "contradicted": "❌", "mixed": "🟡", "can't check": "❔", "": "⬜"}
 
@@ -39,6 +39,8 @@ def _notes_section(tag: str) -> list[str]:
         found = True
         if source != "me":
             out.append(f"\n### Notes from: {source}\n")
+        week = int(tag.split("wk")[1][:2])
+        asked = {q.get("claim", "").lower() for q in notes.open_claim_questions(week, "", source)}
         counts = {}
         for r in rows:
             counts[r.get("verdict", "")] = counts.get(r.get("verdict", ""), 0) + 1
@@ -60,8 +62,7 @@ def _notes_section(tag: str) -> list[str]:
                            f"{a.get('answer_1', '')}  \n")
                 if a.get("answer_2") and not a.get("consistent"):
                     out.append(f"> 🧠 second ask: {a['answer_2']}  \n")
-            elif (r.get("verdict") in ("can't check", "mixed", "") or r.get("needs_paid_or_film")) \
-                    and not r.get("paid_evidence"):
+            elif f"{r['who']}: {r['what']}".lower() in asked:
                 out.append(f"_Open: sent to SūmerBrain (`bbt prompts --sumerbrain-only`)._  \n")
     if not found:
         out.append("_No notes for this week yet. Send them over in the usual `who | what | evidence` style "
