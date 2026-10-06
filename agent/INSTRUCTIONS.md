@@ -1,5 +1,8 @@
 # Weekly extraction (Claude in Chrome)
 
+> **You don't paste this file anymore.** `python -m bbt prompts N` builds the two self-contained
+> prompts from `bbt/prompts.py`. This file is the longer reference for why each rule exists.
+
 You are copying paid charting data for **one** Giants game from pages the user is already
 logged into. Output: a JSON file following `agent/paid_extract.schema.json` (**v1**) plus the
 raw page text. Do **one site per run** (the task says which). Put `null` for the other site's

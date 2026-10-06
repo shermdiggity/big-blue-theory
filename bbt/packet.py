@@ -267,7 +267,7 @@ def build(week: int, team: str = config.TEAM, make_charts: bool = True) -> str:
     nxt_week = week + 1
     try:
         nxt = data.opponent_for(nxt_week, team)
-    except Exception:  # noqa: BLE001 - bye week / season over
+    except (Exception, SystemExit):  # noqa: BLE001 - bye week / season over
         nxt = None
     if nxt:
         w(f"\n## 10. Next: {nxt} (week {nxt_week}). What stands out\n")

@@ -302,6 +302,33 @@ def write_verdicts(claims: list[Claim], week: int, source: str = "me") -> tuple[
     return str(path), str(qpath)
 
 
+def record_verdicts(week: int, verdicts: dict[str, tuple[str, str]], source: str = "me") -> list[str]:
+    """Fill verdict + comment by claim text, never by line number.
+
+    Keys are "who: start of what" (case-insensitive prefix match on both parts), e.g.
+    {"Winston: jittery": ("supported", "All 4 sacks...")}. Returns keys that matched nothing.
+    """
+    tag = config.week_tag(week) + ("" if source == "me" else f"_{source}")
+    path = config.NOTES_DIR / f"{tag}_verdicts.csv"
+    rows = list(csv.DictReader(path.open()))
+    unmatched = []
+    for key, (verdict, comment) in verdicts.items():
+        if verdict not in VERDICTS:
+            raise ValueError(f"{key}: verdict must be one of {VERDICTS}")
+        who, _, what = key.partition(":")
+        hits = [r for r in rows if r["who"].lower().startswith(who.strip().lower())
+                and r["what"].lower().startswith(what.strip().lower())]
+        if len(hits) != 1:
+            unmatched.append(f"{key} ({len(hits)} matches)")
+            continue
+        hits[0]["verdict"], hits[0]["comment"] = verdict, comment
+    with path.open("w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=rows[0].keys())
+        w.writeheader()
+        w.writerows(rows)
+    return unmatched
+
+
 def eye_score() -> pl.DataFrame:
     """Share of checkable notes the data supported, per source and claim type, all graded weeks.
 

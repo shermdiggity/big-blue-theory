@@ -44,7 +44,10 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
 python -m bbt refresh        # load 2024-2026 nflverse data into data/bbt.duckdb (~20s)
-python -m bbt week 3         # build the Week 3 packet -> private/packets/2026_wk03.md + charts
+python -m bbt brief 3        # THE notes doc to write from -> private/briefs/2026_wk03.md (+ packet, charts)
+python -m bbt prompts 3      # the two Claude in Chrome prompts -> private/prompts/
+python -m bbt ingest 3 reply.txt   # merge a pasted extension reply
+python -m bbt week 3         # just the full-tables packet -> private/packets/2026_wk03.md + charts
 python -m bbt run 3          # refresh + check paid extract + packet, timed
 python -m bbt erased         # league table: points erased by penalties
 python -m bbt opponent 4     # next opponent's tendencies, most unusual first
@@ -59,12 +62,12 @@ pytest -q
 
 ## Weekly rhythm
 
-| Day | What |
-|---|---|
-| Sunday | Watch. Write notes in `private/notes/2026_wkNN.md`, one claim per line: `who \| what \| evidence` |
-| Tuesday | Free data has landed. Run the browser agent, then `python -m bbt run N` |
-| Wednesday | Write the post from the packet |
-| Thursday | Publish. Log next week's watch-for |
+| When | You | The pipeline |
+|---|---|---|
+| Sunday night | Send your notes, any format | Checks every note against the data, writes the two browser prompts |
+| Monday/Tuesday | Paste prompt 1 (Sūmer) and prompt 2 (NFL Pro) into Claude in Chrome, paste both replies back | Checks the paid data, fills in the open notes |
+| Tuesday | Read the notes doc (`private/briefs/`) | One doc: your notes checked, what the data adds, film list, next week's watch-for |
+| Wed/Thu | Write and publish | Grades the watch-for after the next game |
 
 ## What stays private
 

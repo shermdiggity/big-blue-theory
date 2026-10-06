@@ -1,5 +1,8 @@
 """Command line: `python -m bbt <command>`.
 
+  brief N              THE NOTES DOC to write from (private/briefs/), builds the packet too
+  prompts N            the two Claude in Chrome prompts (Sūmer, NFL Pro) for week N
+  ingest N FILE        merge a pasted Claude in Chrome reply into week N's paid data
   refresh              re-download nflverse data into data/bbt.duckdb
   week N               build the game packet for week N (private/packets/)
   run N                refresh + check paid extract + packet, timed (ticket 16)
@@ -38,6 +41,22 @@ def cmd_refresh(_):
 def cmd_week(a):
     from bbt import packet
     print(packet.build(a.week, make_charts=not a.no_charts))
+
+
+def cmd_prompts(a):
+    from bbt import prompts
+    for path in prompts.build(a.week):
+        print(path)
+
+
+def cmd_ingest(a):
+    from bbt import prompts
+    print(prompts.ingest(a.week, open(a.file).read()))
+
+
+def cmd_brief(a):
+    from bbt import brief
+    print(brief.build(a.week))
 
 
 def cmd_check(a):
@@ -170,14 +189,16 @@ def main(argv=None):
     s = sub.add_parser("notes"); s.add_argument("week", type=int)
     s.add_argument("--source", default="me", help="whose notes: me (default) or e.g. skinner")
     s.set_defaults(fn=cmd_notes)
-    for name, fn in [("run", cmd_run), ("check", cmd_check),
-                     ("opponent", cmd_opponent), ("grade", cmd_grade)]:
+    for name, fn in [("run", cmd_run), ("check", cmd_check), ("prompts", cmd_prompts),
+                     ("brief", cmd_brief), ("opponent", cmd_opponent), ("grade", cmd_grade)]:
         s = sub.add_parser(name); s.add_argument("week", type=int); s.set_defaults(fn=fn)
     s = sub.add_parser("watchfor"); s.add_argument("week", type=int)
     s.add_argument("--metric", required=True); s.add_argument("--text", required=True)
     g = s.add_mutually_exclusive_group(required=True)
     g.add_argument("--over", type=float); g.add_argument("--under", type=float)
     s.set_defaults(fn=cmd_watchfor)
+    s = sub.add_parser("ingest"); s.add_argument("week", type=int); s.add_argument("file")
+    s.set_defaults(fn=cmd_ingest)
     sub.add_parser("eye").set_defaults(fn=cmd_eye)
     sub.add_parser("erased").set_defaults(fn=cmd_erased)
     sub.add_parser("audit").set_defaults(fn=cmd_audit)

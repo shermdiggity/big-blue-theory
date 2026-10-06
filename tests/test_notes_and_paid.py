@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from bbt import notes, paid
@@ -133,3 +135,33 @@ def test_verbatim_string_numbers_are_traced():
     ex["sumer"]["teams_defense"]["Blitz %"] = "44.4%"
     r = paid.check(ex, RAW, 3, "2026_03_TEN_NYG", FREE)
     assert any("Blitz %` = 44.4 not found" in w for w in r.warnings), r.render()
+
+
+def test_record_verdicts_matches_by_text(tmp_path, monkeypatch):
+    from bbt import config
+    monkeypatch.setattr(config, "NOTES_DIR", tmp_path)
+    claims = notes.parse("# header line shifts line numbers\nNabers | open deep | targets\nOL | held up | sacks\n")
+    notes.write_verdicts(claims, 4)
+    missing = notes.record_verdicts(4, {"OL: held": ("contradicted", "4 sacks"), "Nabers: open": ("supported", "x"),
+                                        "Nobody: here": ("mixed", "")})
+    import csv
+    rows = {r["who"]: r for r in csv.DictReader((tmp_path / "2026_wk04_verdicts.csv").open())}
+    assert rows["OL"]["verdict"] == "contradicted" and rows["Nabers"]["verdict"] == "supported"
+    assert missing == ["Nobody: here (0 matches)"]
+
+
+def test_ingest_merges_sites(tmp_path, monkeypatch):
+    from bbt import config, prompts
+    monkeypatch.setattr(config, "PAID_DIR", tmp_path)
+    monkeypatch.setattr(prompts.data, "game_id_for", lambda w: "2026_04_ARI_NYG")
+    monkeypatch.setattr(prompts.data, "opponent_for", lambda w: "ARI")
+    a = 'ok\n```json\n{"site":"sumer","sumer":{"teams_defense":{"Blitz %":"50.0%"}},"missing_fields":[]}\n```\n```text\n=== A ===\nBlitz % 50.0%\n```'
+    b = '```json\n{"site":"nfl_pro","nfl_pro":{"film_room":{"pressure_plays":12}},"missing_fields":[]}\n```\n```text\n=== B ===\n12\n```'
+    prompts.ingest(4, a)
+    prompts.ingest(4, b)
+    prompts.ingest(4, a)  # re-pasting a site replaces it, doesn't duplicate
+    ext = json.loads((tmp_path / "2026_wk04.json").read_text())
+    assert ext["sumer"]["teams_defense"]["Blitz %"] == "50.0%" and ext["nfl_pro"]["film_room"]["pressure_plays"] == 12
+    assert ext["missing_fields"] == []
+    raw = (tmp_path / "2026_wk04_raw.txt").read_text()
+    assert raw.count("##### sumer #####") == 1 and "##### nfl_pro #####" in raw

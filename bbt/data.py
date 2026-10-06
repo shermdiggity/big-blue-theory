@@ -125,9 +125,12 @@ def game_id_for(week: int, team: str = config.TEAM, season: int = config.SEASON)
 
 
 def opponent_for(week: int, team: str = config.TEAM, season: int = config.SEASON) -> str:
-    row = schedule(season).filter(
+    rows = schedule(season).filter(
         (pl.col("week") == week) & ((pl.col("home_team") == team) | (pl.col("away_team") == team))
-    ).row(0, named=True)
+    )
+    if rows.is_empty():
+        raise SystemExit(f"{team} has no game in week {week} of {season} (bye week?)")
+    row = rows.row(0, named=True)
     return row["away_team"] if row["home_team"] == team else row["home_team"]
 
 

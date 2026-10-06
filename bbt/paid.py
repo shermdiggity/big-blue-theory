@@ -211,7 +211,7 @@ def _free_checks(extract: dict, free: FreeCounts, totals: dict, r: Report) -> No
         if paid is not None and freev is not None and abs(paid - freev) > tol:
             r.warnings.append(f"{label}: Sūmer {paid} vs free play-by-play {freev}")
 
-    plays = (extract["sumer"].get("teams_offense") or {}).get("Plays")
+    plays = ((extract.get("sumer") or {}).get("teams_offense") or {}).get("Plays")
     warn_if("NYG offensive plays (Teams > Offense 'Plays')", plays, free.off_plays)
 
     nyg_pass = totals.get("sumer.game_page.nyg.passing", {})
@@ -227,7 +227,7 @@ def _free_checks(extract: dict, free: FreeCounts, totals: dict, r: Report) -> No
     if opp_rush:
         warn_if(f"{extract['opponent']} rush attempts (game page splits)", max(opp_rush.values()), free.opp_rushes, tol=2)
 
-    gp = extract["sumer"].get("game_page") or {}
+    gp = (extract.get("sumer") or {}).get("game_page") or {}
     for side, freev, label in (("nyg", free.sacks_taken, "NYG sacks taken"),
                                ("opp", free.sacks_made, "NYG sacks made")):
         rows = (((gp.get(side) or {}).get("passing") or {}).get("pressure")) or []
