@@ -165,6 +165,14 @@ def build_sumerbrain(week: int) -> str | None:
     return str(path)
 
 
+FILM_RULES = """RULES (follow exactly; my paid account depends on it)
+- Read only. Never click export, download, share, save, settings, account, billing or upgrade. Never log in or out or type credentials.
+- This game only. Human pace, one tab (the one I'm looking at): at least 10 seconds between page loads, 5 seconds between clicks. Hard cap: 4 page loads, 50 clicks. Stop at the cap and send what you have.
+- Click visible links and controls only: no dev tools, console, page source or URL editing.
+- CAPTCHA, "unusual activity", rate-limit message or forced logout: stop immediately, don't retry, tell me where you were.
+- Dropdowns fade in slowly: wait until a list is fully open before picking."""
+
+
 def build_film(week: int) -> str | None:
     """Standalone NFL Pro prompt that only collects Film Room links for this week's clip list."""
     block = film.prompt_block(week)
@@ -175,7 +183,7 @@ def build_film(week: int) -> str | None:
     text = "\n\n".join([
         f"You're helping me collect NFL Pro Film Room links for one New York Giants game: {data.game_id_for(week)} "
         f"(Week {week}, {config.SEASON}), NYG vs {data.opponent_for(week)}. I'm logged into pro.nfl.com already.",
-        RULES.format(cap="4 page loads, 40 clicks"),
+        FILM_RULES,
         "ROUTE: Watch Film → Film Room → set Season 2026, Week " + str(week) + ", Game = this game.",
         block,
         "REPLY FORMAT: one ```json block with this shape, nothing else of substance:\n" + json.dumps(skeleton),
