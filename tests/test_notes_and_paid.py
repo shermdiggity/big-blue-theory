@@ -178,7 +178,10 @@ def test_open_claims_go_to_sumerbrain_and_answers_are_filed(tmp_path, monkeypatc
     (tmp_path / "2026_wk04_sumerbrain_questions.json").write_text(json.dumps(
         [{"claim": "C: asked thing", "question": "why C?"}]))
     qs = notes.open_claim_questions(4, "game")
-    assert [q["claim"] for q in qs] == ["A: open thing", "C: asked thing"]   # B is settled, not asked
-    assert qs[1]["question"] == "why C?"
+    # hand-written first, then open claims; B is settled so it isn't asked
+    assert [q["claim"] for q in qs] == ["C: asked thing", "A: open thing"]
+    assert qs[0]["question"] == "why C?"
+    assert "Is that true in your data?" in qs[1]["question"]                # plain fan-style ask
+    assert "quarter" not in qs[1]["question"].lower()                        # no film-style asks
     notes.record_sumerbrain(4, {"A: open": {"answer_1": "7 of 9", "answer_2": "7 of 9", "consistent": True}})
     assert [q["claim"] for q in notes.open_claim_questions(4, "game")] == ["C: asked thing"]  # answered drops out

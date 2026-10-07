@@ -14,15 +14,27 @@ post from one notes doc. Everything else is this session's job. Keep it that sim
    - Record each verdict with `notes.record_verdicts(N, {"who: start of claim": (verdict, comment)})`.
      **Never key verdicts by line number.** The comment must hold the numbers behind the verdict.
    - Write game-specific paid asks to `private/notes/<tag>_asks.md` (`## sumer` / `## nflpro`).
-   - **Nothing gets dropped for being unverifiable: it goes to SūmerBrain.** Every claim still
-     can't-check / mixed after free data gets a SūmerBrain question automatically. Also write one
-     (in `<tag>_sumerbrain_questions.json`, keyed by `"claim": "who: what"`) for every question the user
-     asks inside their notes ("why is X trending", "who's to blame", "what changed"). Questions demand
-     definitions, raw counts and the specific plays, and get asked twice.
+   - **Nothing gets dropped for being unverifiable: it goes to SūmerBrain.** Claims still can't-check /
+     mixed after free data get a question automatically; also hand-write one (in
+     `<tag>_sumerbrain_questions.json`, keyed `"claim": "who: what"`) for every question the user asks inside
+     their notes. Max 6 a week, hand-written first. It's part of prompt 1 (Sūmer).
    - `python -m bbt prompts N` and give the user the files in `private/prompts/`. That's all they paste.
      After the table runs, claims still open → `python -m bbt prompts N --sumerbrain-only`.
-   - SūmerBrain answers are kept and shown as SūmerBrain's charting (🧠), labeled unreliable if the two
-     asks disagree. Cross-check them against the tables where possible; never silently promote them to fact.
+   - SūmerBrain answers are shown as SūmerBrain's charting (🧠). Cross-check them against the tables
+     and free data where you can, and say so in the verdict; never silently promote them to fact.
+
+## How to ask SūmerBrain (learned the hard way)
+It's a stats chatbot over Sūmer's charting, not a film room. Ask like a fan, not a film analyst.
+- **Works:** say what you saw, ask if it's true, ask for a split it can compute and a comparison.
+  "I've noticed the Giants running away from their fullback a lot lately. Is that true? How do runs
+  behind him compare with runs away from him?" → counts, rates, week-by-week, caveats.
+- **Gets refused ("needs film-level analysis"):** per-play lists, quarter + clock, alignments,
+  "who lost the edge on each run", "the primary defender on every target", demands for definitions.
+- Ask each question **once**, in a new chat. On a refusal, send **one** reworded follow-up asking
+  for its charting stats at the team/player level. Never resend the same wording.
+- It often answers more than asked (e.g. it used per-play run-block grades for "who lost blocks").
+  Watch for swapped player positions/sides and check names and counts against the Players tables.
+
 2. **User pastes the two extension replies.** Save each to the scratchpad, `python -m bbt ingest N <file>`,
    then `python -m bbt check N`. If they pasted page text with no JSON block, save the text as
    `private/paid/<tag>_raw.txt` (Sūmer first, then a `##### nfl_pro #####` line, then NFL Pro) and run

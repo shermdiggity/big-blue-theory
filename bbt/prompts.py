@@ -49,12 +49,12 @@ Background tabs don't take clicks: work in the visible tab. The scoreboard strip
 5. Next Gen Stats -> Team Defense, Week {week}: NYG row of Pass Defense and Run Defense. Then Team Offense: NYG row of Passing, Rushing, Receiving. -> "ngs_team_defense", "ngs_team_offense".
 6. Game -> Insights: copy each card's text verbatim -> "insights"."""
 
-SUMERBRAIN = """SŪMERBRAIN (always do this part; chat messages don't count toward the page-load cap)
-These are things the tables can't answer. Budget about 45 minutes; if you run out, stop and send what you have. For each question:
-- Open a NEW SūmerBrain chat, paste the question exactly (everything after the [bracketed label]; the label is only for my records, don't paste it), and wait for the full answer.
-- Then open another new chat and ask it again, word for word. Wait 10 seconds between questions.
-- Copy both answers verbatim (trim boilerplate). Note whether they gave raw counts and whether the two answers agree on the numbers.
-- Don't interpret, merge or average the answers. If it errors, wait 30 seconds and try once more, then move on.
+SUMERBRAIN = """SŪMERBRAIN (Sūmer's AI chat; do this after the tables, about 20-30 minutes)
+For each question below:
+1. Open a NEW SūmerBrain chat and PASTE the question (don't type it: typing drops letters). Paste only the text after the [bracketed label]. Check it reads correctly, then send. Wait for the full answer (it can take 1-5 minutes).
+2. If it answers, copy the answer verbatim and move to the next question. Ask each question ONCE.
+3. If it says it needs film, isn't available with this access, or can't answer, send ONE follow-up in the same chat: "No film needed. What do your charting stats show on this, at the team or player level, for this game and the Giants' other games this season?" Copy that answer too. Never resend the same question.
+4. If it errors, wait 30 seconds and try once more, then move on.
 {questions}"""
 
 SUMER_SKELETON = {
@@ -100,7 +100,7 @@ NFLPRO_SKELETON = {
 }
 
 COMMON_TAIL = {
-    "sumerbrain": [{"claim": "the [bracketed claim] before the question", "question": "...", "answer_1": "...", "answer_2": "...", "counts_given": True, "consistent": True}],
+    "sumerbrain": [{"claim": "the [bracketed label] before the question", "question": "...", "answer_1": "its answer, verbatim", "answer_2": "the follow-up answer if you had to send the follow-up, else empty", "refused": False}],
     "extra_asks": [{"ask": "...", "answer": "verbatim from the page"}],
     "screenshot_fields": [], "missing_fields": [], "agent_notes": "",
     "usage": {"page_loads": 0, "clicks": 0, "minutes": 0},
@@ -134,8 +134,9 @@ def _questions_block(questions) -> str:
 
 SUMERBRAIN_ONLY_SKELETON = {
     "site": "sumerbrain",
-    "sumerbrain": [{"claim": "the [bracketed claim] before the question", "question": "...",
-                    "answer_1": "...", "answer_2": "...", "counts_given": True, "consistent": True}],
+    "sumerbrain": [{"claim": "the [bracketed label] before the question", "question": "...",
+                    "answer_1": "its answer, verbatim", "answer_2": "follow-up answer if sent, else empty",
+                    "refused": False}],
     "agent_notes": "", "usage": {"chats": 0, "minutes": 0},
 }
 
@@ -155,7 +156,7 @@ def build_sumerbrain(week: int) -> str | None:
         _questions_block(questions),
         REPLY.format(skeleton=json.dumps(SUMERBRAIN_ONLY_SKELETON, ensure_ascii=False)).replace(
             "2. ```text with the raw page text of every page and panel you read, each starting with a line \"=== <breadcrumb> ===\".",
-            "2. ```text with both answers to every question, verbatim, each starting with \"=== <question number> ===\"."),
+            "2. ```text with every answer verbatim, each starting with \"=== <question number> ===\"."),
     ]) + "\n"
     path = config.PRIVATE_DIR / "prompts" / f"{tag}_3_sumerbrain.txt"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -226,7 +227,7 @@ def ingest(week: int, reply_text: str) -> str:
     # SūmerBrain answers: replace any earlier answer to the same claim, then file them on the claims
     asked = {qa.get("claim") for qa in sb}
     ext["sumerbrain"] = [q for q in ext.get("sumerbrain") or [] if q.get("claim") not in asked] + sb
-    answers = {qa["claim"]: {k: qa.get(k) for k in ("question", "answer_1", "answer_2", "counts_given", "consistent")}
+    answers = {qa["claim"]: {k: qa.get(k) for k in ("question", "answer_1", "answer_2", "refused", "counts_given", "consistent")}
                for qa in sb if qa.get("claim") and qa["claim"] != "extra"}
     unmatched = []
     if answers and (config.NOTES_DIR / f"{tag}_verdicts.csv").exists():

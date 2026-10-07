@@ -55,13 +55,12 @@ def _notes_section(tag: str) -> list[str]:
                 out.append(f"Paid data: {r['paid_evidence']}  \n")
             if r.get("sumerbrain"):
                 a = json.loads(r["sumerbrain"])
-                tag_ = ("asked twice, answers agree" if a.get("consistent") else
-                        "**answers differ between asks: treat as unreliable**" if a.get("answer_2") else "asked once")
-                counts = "" if a.get("counts_given") else ", no raw counts given"
-                out.append(f"> 🧠 **SūmerBrain** ({tag_}{counts}; Sūmer's charting, not verified against tables): "
-                           f"{a.get('answer_1', '')}  \n")
-                if a.get("answer_2") and not a.get("consistent"):
-                    out.append(f"> 🧠 second ask: {a['answer_2']}  \n")
+                if a.get("refused") and not a.get("answer_2"):
+                    out.append("> 🧠 SūmerBrain couldn't answer this one.  \n")
+                else:
+                    flag = " **Two asks gave different numbers: treat as unreliable.**" if a.get("consistent") is False else ""
+                    out.append(f"> 🧠 **SūmerBrain** (Sūmer's charting, not table-verified unless noted above):{flag} "
+                               f"{a.get('answer_2') if a.get('refused') else a.get('answer_1', '')}  \n")
             elif f"{r['who']}: {r['what']}".lower() in asked:
                 out.append(f"_Open: sent to SūmerBrain (`bbt prompts --sumerbrain-only`)._  \n")
     if not found:

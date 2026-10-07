@@ -34,6 +34,7 @@ import polars as pl
 from bbt import config
 
 VERDICTS = ["supported", "contradicted", "mixed", "can't check"]
+MAX_SUMERBRAIN = 6  # questions per week; each takes 2-5 minutes to answer
 
 UNITS = {
     "ol": "offense", "o-line": "offense", "offensive line": "offense", "offense": "offense",
@@ -246,11 +247,12 @@ def check(claims: list[Claim], game: pl.DataFrame, team: str = config.TEAM) -> l
 
 
 def _claim_question(who: str, what: str, evidence: str, game_label: str) -> str:
-    ev = f" Focus on: {evidence}." if evidence else ""
-    return (f"For {game_label} only. Claim from my notes: \"{who}: {what}\".{ev} "
-            f"Does your charting of this game support it? Answer with specific numbers: raw counts "
-            f"with their definitions (e.g. '7 of 31 dropbacks, where a pressure = ...'), and list the "
-            f"specific plays (quarter + clock) that support or contradict it. Use only this game's snaps.")
+    """Ask the way a fan would: say what you saw, ask if it holds up, ask for a split it can
+    compute. SūmerBrain refuses film-style asks (per-play lists, alignments, "who lost the
+    block", quarter + clock), so never ask for those."""
+    return (f"Watching {game_label}, I noticed this about {who}: {what}. Is that true in your data? "
+            f"What numbers back it up or push back on it, and how does it compare with the Giants' "
+            f"other games this season?")
 
 
 def sumerbrain_questions(claims: list[Claim], game_label: str) -> list[dict]:
@@ -260,7 +262,7 @@ def sumerbrain_questions(claims: list[Claim], game_label: str) -> list[dict]:
     definitions, raw counts and the specific plays, and gets asked twice (different answers
     = unreliable). Answers are kept and labeled as SūmerBrain's, not treated as verified.
     """
-    return [{"claim": f"{c.who}: {c.what}", "claim_line": c.line_no, "ask_twice": True,
+    return [{"claim": f"{c.who}: {c.what}", "claim_line": c.line_no,
              "question": _claim_question(c.who, c.what, ", ".join(c.needs_paid), game_label)}
             for c in claims if c.needs_paid]
 
@@ -285,11 +287,14 @@ def open_claim_questions(week: int, game_label: str, source: str = "me") -> list
             if not (open_ or custom_q):
                 continue
             q = custom_q or {
-                "claim": claim, "ask_twice": True,
+                "claim": claim,
                 "question": _claim_question(r["who"], r["what"], r.get("needs_paid_or_film", ""), game_label)}
             out.append(q)
     out += list(by_claim.values())  # custom questions not tied to an open claim
-    return out
+    # Hand-written questions first, then the rest; cap so the run stays ~20-30 minutes.
+    custom_claims = {q.get("claim", "").lower() for q in custom}
+    out.sort(key=lambda q: q.get("claim", "").lower() not in custom_claims)
+    return out[:MAX_SUMERBRAIN]
 
 
 def record_sumerbrain(week: int, answers: dict[str, dict], source: str = "me") -> list[str]:
