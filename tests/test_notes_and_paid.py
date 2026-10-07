@@ -185,3 +185,21 @@ def test_open_claims_go_to_sumerbrain_and_answers_are_filed(tmp_path, monkeypatc
     assert "quarter" not in qs[1]["question"].lower()                        # no film-style asks
     notes.record_sumerbrain(4, {"A: open": {"answer_1": "7 of 9", "answer_2": "7 of 9", "consistent": True}})
     assert [q["claim"] for q in notes.open_claim_questions(4, "game")] == ["C: asked thing"]  # answered drops out
+
+
+def test_clock_refs_are_found_in_text():
+    from bbt import film
+    assert film._refs("Pull Lead collapses (Q3 13:38, Q3 2:30) and Q4 12:42") == [(3, "13:38"), (3, "02:30"), (4, "12:42")]
+    assert film._norm("Q1 2:57") == "Q1 02:57"
+
+
+def test_film_links_reply_adds_links(tmp_path, monkeypatch):
+    from bbt import config, prompts
+    monkeypatch.setattr(config, "PAID_DIR", tmp_path)
+    monkeypatch.setattr(prompts.data, "game_id_for", lambda w: "2026_04_ARI_NYG")
+    monkeypatch.setattr(prompts.data, "opponent_for", lambda w: "ARI")
+    prompts.ingest(4, '```json\n{"site":"nfl_pro","nfl_pro":{"film_room":{"all_plays":10}},"missing_fields":[]}\n```')
+    prompts.ingest(4, '```json\n{"site":"nfl_pro_film","film_links":[{"play":"Q1 02:57","url":"https://pro.nfl.com/x"}]}\n```')
+    ext = json.loads((tmp_path / "2026_wk04.json").read_text())
+    assert ext["nfl_pro"]["film_room"]["all_plays"] == 10            # existing NFL Pro data kept
+    assert ext["nfl_pro"]["film_links"][0]["url"] == "https://pro.nfl.com/x"

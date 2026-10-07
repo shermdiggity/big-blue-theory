@@ -175,10 +175,8 @@ def build(week: int, team: str = config.TEAM) -> str:
             out.append(f"- {r['label']}: **{v}** vs league {lg} (rank {r['rank']} of {r['of']}) · metric `{r['metric']}`\n")
         out.append("\nPick one and tell me the line; it goes in the public scorecard.\n")
 
-    film = config.PACKETS_DIR / f"{tag}_film.md"
-    if film.exists():
-        body = film.read_text().split("\n", 2)[-1]
-        out.append("\n## Film to watch\n" + body)
+    from bbt import film
+    out.append(film.render(week))
 
     out.append("\n## Charts\n" + "".join(f"![{p.stem}](../charts/{p.name})\n"
                                          for p in sorted(config.CHARTS_DIR.glob(f"{tag}_*.png"))))

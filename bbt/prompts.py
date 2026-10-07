@@ -19,7 +19,7 @@ import json
 import re
 from datetime import datetime
 
-from bbt import config, data, notes
+from bbt import config, data, film, notes
 
 RULES = """RULES (follow exactly; my paid accounts depend on it)
 - Read only. Never click export, download, share, settings, account, billing or upgrade. Never log in or out or type credentials.
@@ -96,6 +96,7 @@ NFLPRO_SKELETON = {
         "ngs_team_defense": {"pass_defense": {"<column label>": "<value>"}, "run_defense": {}},
         "ngs_team_offense": {"passing": {}, "rushing": {}, "receiving": {}},
         "insights": ["verbatim card text"],
+        "film_links": [{"play": "Q1 02:57", "url": "address bar after clicking the play"}],
     },
 }
 
@@ -164,6 +165,27 @@ def build_sumerbrain(week: int) -> str | None:
     return str(path)
 
 
+def build_film(week: int) -> str | None:
+    """Standalone NFL Pro prompt that only collects Film Room links for this week's clip list."""
+    block = film.prompt_block(week)
+    if not block:
+        return None
+    skeleton = {"site": "nfl_pro_film", "film_links": [{"play": "Q1 02:57", "url": "..."}],
+                "agent_notes": "", "usage": {"page_loads": 0, "clicks": 0, "minutes": 0}}
+    text = "\n\n".join([
+        f"You're helping me collect NFL Pro Film Room links for one New York Giants game: {data.game_id_for(week)} "
+        f"(Week {week}, {config.SEASON}), NYG vs {data.opponent_for(week)}. I'm logged into pro.nfl.com already.",
+        RULES.format(cap="4 page loads, 40 clicks"),
+        "ROUTE: Watch Film → Film Room → set Season 2026, Week " + str(week) + ", Game = this game.",
+        block,
+        "REPLY FORMAT: one ```json block with this shape, nothing else of substance:\n" + json.dumps(skeleton),
+    ]) + "\n"
+    path = config.PRIVATE_DIR / "prompts" / f"{config.week_tag(week)}_4_film_links.txt"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    return str(path)
+
+
 def build(week: int) -> tuple[str, str]:
     tag = config.week_tag(week)
     game_id = data.game_id_for(week)
@@ -180,6 +202,10 @@ def build(week: int) -> tuple[str, str]:
     ):
         parts = [header + f"This run is {site} only.\n", RULES.format(cap=cap), route.format(week=week)]
         extras = _section(asks_path, "sumer" if n == "1_sumer" else "nflpro")
+        if n == "2_nflpro":
+            fb = film.prompt_block(week)
+            if fb:
+                route = route + "\n\n" + fb.replace("{", "{{").replace("}", "}}")
         if extras:
             parts.append("EXTRA ASKS FOR THIS GAME (still within the caps; answers go in \"extra_asks\")\n" + extras)
         if n == "1_sumer" and questions:
@@ -217,6 +243,14 @@ def ingest(week: int, reply_text: str) -> str:
     }
     ext["extracted_at"] = datetime.now().isoformat(timespec="seconds")
     sb = part.get("sumerbrain") or []
+    if site == "nfl_pro_film":
+        np_ = ext.get("nfl_pro") or {}
+        have = {l.get("play"): l for l in np_.get("film_links") or []}
+        have.update({l.get("play"): l for l in part.get("film_links") or []})
+        np_["film_links"] = list(have.values())
+        ext["nfl_pro"] = np_
+        jpath.write_text(json.dumps(ext, indent=1, ensure_ascii=False))
+        return f"added {len(part.get('film_links') or [])} Film Room links"
     if site != "sumerbrain":
         ext[site] = part.get(site)
         ext["missing_fields"] = [m for m in ext.get("missing_fields", []) if m != site] + part.get("missing_fields", [])

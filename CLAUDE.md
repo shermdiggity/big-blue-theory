@@ -42,6 +42,10 @@ It's a stats chatbot over Sūmer's charting, not a film room. Ask like a fan, no
    Sūmer conventions: split "comp/att" excludes sacks, share % is of dropbacks (att + sacks).
 3. `python -m bbt brief N` → `private/briefs/<tag>.md`, the doc they write from (it also builds the
    packet and charts). Send it with SendUserFile.
+   - **Clips:** the doc's "Clips to watch" list builds itself from the top swing plays plus every
+     "Q3 2:30"-style play cited in verdicts and SūmerBrain answers, so cite plays that way. Prompt 2
+     (NFL Pro) collects a Film Room link for each; `bbt prompts N --film-only` does just that step.
+     Links play only for NFL+ Premium accounts. NFL video can't be re-uploaded to a public post.
 4. Ask for next week's watch-for and log it: `python -m bbt watchfor N+1 --metric … --over|--under …`.
 
 ## Non-negotiables

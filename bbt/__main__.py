@@ -3,6 +3,7 @@
   brief N              THE NOTES DOC to write from (private/briefs/), builds the packet too
   prompts N            the two Claude in Chrome prompts (Sūmer + SūmerBrain, NFL Pro) for week N
   prompts N --sumerbrain-only   one prompt: SūmerBrain questions for every claim still open
+  prompts N --film-only         one prompt: NFL Pro Film Room links for the week's clip list
   ingest N FILE        merge a pasted Claude in Chrome reply into week N's paid data
   ingest-raw N FILE    build week N's paid data from pasted page text (when there's no JSON block)
   refresh              re-download nflverse data into data/bbt.duckdb
@@ -49,6 +50,9 @@ def cmd_prompts(a):
     from bbt import prompts
     if a.sumerbrain_only:
         print(prompts.build_sumerbrain(a.week) or "No open claims: nothing to ask SūmerBrain.")
+        return
+    if a.film_only:
+        print(prompts.build_film(a.week) or "No clips to collect.")
         return
     for path in prompts.build(a.week):
         print(path)
@@ -202,6 +206,7 @@ def main(argv=None):
     s = sub.add_parser("prompts"); s.add_argument("week", type=int)
     s.add_argument("--sumerbrain-only", action="store_true",
                    help="just the SūmerBrain prompt for claims still open (after the table runs)")
+    s.add_argument("--film-only", action="store_true", help="just the NFL Pro Film Room links for the clip list")
     s.set_defaults(fn=cmd_prompts)
     for name, fn in [("run", cmd_run), ("check", cmd_check),
                      ("brief", cmd_brief), ("opponent", cmd_opponent), ("grade", cmd_grade)]:
