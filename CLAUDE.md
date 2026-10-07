@@ -40,13 +40,17 @@ It's a stats chatbot over Sūmer's charting, not a film room. Ask like a fan, no
    `private/paid/<tag>_raw.txt` (Sūmer first, then a `##### nfl_pro #####` line, then NFL Pro) and run
    `python -m bbt ingest-raw N private/paid/<tag>_raw.txt`. Update the verdicts that were waiting on paid data.
    Sūmer conventions: split "comp/att" excludes sacks, share % is of dropbacks (att + sacks).
-3. `python -m bbt brief N` → `private/briefs/<tag>.md`, the doc they write from (it also builds the
-   packet and charts). Send it with SendUserFile.
+3. **Charts.** For each point worth a picture, add a spec to `private/notes/<tag>_charts.json`
+   (kinds and fields in `docs/charts.md`). Title = the takeaway; subtitle = what's measured + sample;
+   source names SūmerBrain when it's SūmerBrain; `claim` = the note it backs. `python -m bbt charts N`,
+   then open every PNG and look at it before sending. The five free-data charts build themselves.
+4. `python -m bbt brief N` → `private/briefs/<tag>.md`, the doc they write from (it also builds the
+   packet and all charts, each story chart under its note). Send it and the chart PNGs with SendUserFile.
    - **Clips:** the doc's "Clips to watch" list builds itself from the top swing plays plus every
      "Q3 2:30"-style play cited in verdicts and SūmerBrain answers, so cite plays that way. Prompt 2
      (NFL Pro) collects a Film Room link for each; `bbt prompts N --film-only` does just that step.
      Links play only for NFL+ Premium accounts. NFL video can't be re-uploaded to a public post.
-4. Ask for next week's watch-for and log it: `python -m bbt watchfor N+1 --metric … --over|--under …`.
+5. Ask for next week's watch-for and log it: `python -m bbt watchfor N+1 --metric … --over|--under …`.
 
 ## Non-negotiables
 - **The repo is public.** Paid numbers, notes, briefs, prompts and packets live only in `private/`

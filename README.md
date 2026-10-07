@@ -45,6 +45,7 @@ pip install -r requirements.txt
 
 python -m bbt refresh        # load 2024-2026 nflverse data into data/bbt.duckdb (~20s)
 python -m bbt brief 3        # THE notes doc to write from -> private/briefs/2026_wk03.md (+ packet, charts)
+python -m bbt charts 3       # story charts from private/notes/2026_wk03_charts.json (docs/charts.md)
 python -m bbt prompts 3      # the two Claude in Chrome prompts -> private/prompts/
 python -m bbt ingest 3 reply.txt   # merge a pasted extension reply
 python -m bbt week 3         # just the full-tables packet -> private/packets/2026_wk03.md + charts

@@ -19,8 +19,9 @@ import json
 
 import polars as pl
 
-from bbt import config, data, erased, gameplan, notes, opponent, packet, paid, penalties, swing
+from bbt import config, data, erased, gameplan, notes, opponent, packet, paid, penalties, swing, viz
 
+AUTO_CHARTS = ["wp", "gameplan", "drives", "penalties", "erased_league"]
 ICON = {"sumerbrain": "🧠", "supported": "✅", "contradicted": "❌", "mixed": "🟡", "can't check": "❔", "": "⬜"}
 
 
@@ -28,7 +29,13 @@ def _pct(v):
     return "–" if v is None else f"{v * 100:.0f}%"
 
 
-def _notes_section(tag: str) -> list[str]:
+def _chart_md(spec: dict, path) -> str:
+    return f"\n![{spec.get('title', path.stem)}](../charts/{path.name})\n"
+
+
+def _notes_section(tag: str, story: list | None = None, placed: set | None = None) -> list[str]:
+    """Each note with its verdict; a story chart whose spec names the claim goes right under it."""
+    story, placed = story or [], placed if placed is not None else set()
     out = ["## Your notes, checked\n"]
     found = False
     for p in sorted(config.NOTES_DIR.glob(f"{tag}*_verdicts.csv")):
@@ -63,6 +70,12 @@ def _notes_section(tag: str) -> list[str]:
                                f"{a.get('answer_2') if a.get('refused') else a.get('answer_1', '')}  \n")
             elif f"{r['who']}: {r['what']}".lower() in asked:
                 out.append(f"_Open: sent to SūmerBrain (`bbt prompts --sumerbrain-only`)._  \n")
+            claim = f"{r['who']}: {r['what']}".lower()
+            for spec, png in story:
+                key = (spec.get("claim") or "").lower()
+                if key and claim.startswith(key) and png.name not in placed:
+                    placed.add(png.name)
+                    out.append(_chart_md(spec, png))
     if not found:
         out.append("_No notes for this week yet. Send them over in the usual `who | what | evidence` style "
                    "(or just as bullet points) and they get checked._\n")
@@ -136,7 +149,9 @@ def build(week: int, team: str = config.TEAM) -> str:
     result = "W" if nyg_pts > opp_pts else ("L" if nyg_pts < opp_pts else "T")
     has_ftn = bool(game["has_ftn"].fill_null(False).any())
 
-    packet_path = packet.build(week, team)  # appendix + charts
+    packet_path = packet.build(week, team)  # appendix + the automatic charts
+    story = viz.render_week(week, kicker=f"Week {week} · {team} vs {opp}")  # charts from <tag>_charts.json
+    placed: set[str] = set()
 
     out = [f"# Week {week} notes doc: {team} {nyg_pts}, {opp} {opp_pts} ({result})\n",
            "_Private. Everything you need to write the post: your notes checked, what the data adds, "
@@ -146,7 +161,7 @@ def build(week: int, team: str = config.TEAM) -> str:
            "from outside (line calls, checks). One idea per post. *One must imagine the Giants fan happy.*\n",
            f"\nData status: play-by-play ✅ · FTN charting {'✅' if has_ftn else '⏳ not published yet'} · "
            f"paid {'✅' if paid.load(week) else '⏳ not in yet'}\n\n"]
-    out += _notes_section(tag)
+    out += _notes_section(tag, story, placed)
     out += _auto_section(season, game, game_id, week, team, baseline)
     out += _paid_section(week, game, game_id)
 
@@ -178,8 +193,13 @@ def build(week: int, team: str = config.TEAM) -> str:
     from bbt import film
     out.append(film.render(week))
 
-    out.append("\n## Charts\n" + "".join(f"![{p.stem}](../charts/{p.name})\n"
-                                         for p in sorted(config.CHARTS_DIR.glob(f"{tag}_*.png"))))
+    out.append("\n## Charts\n\n_PNG cards in `private/charts/`, sized for a post (1600 px wide). "
+               f"Story charts come from `private/notes/{tag}_charts.json`; the rest build every week._\n")
+    rest = [(s, p) for s, p in story if p.name not in placed]
+    if rest:
+        out.append("\n### More story charts\n" + "".join(_chart_md(s, p) for s, p in rest))
+    auto = [p for p in (config.CHARTS_DIR / f"{tag}_{n}.png" for n in AUTO_CHARTS) if p.exists()]
+    out.append("\n### Every week (free data)\n" + "".join(f"\n![{p.stem}](../charts/{p.name})\n" for p in auto))
     out.append(f"\n---\nFull tables: `{packet_path}`. Credit in the post: {config.FTN_CREDIT}; "
                "play-by-play from nflverse.\n")
 

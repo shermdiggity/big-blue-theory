@@ -294,9 +294,11 @@ def build(week: int, team: str = config.TEAM, make_charts: bool = True) -> str:
     if make_charts:
         cdir = config.CHARTS_DIR
         made = [
-            charts.wp_chart(swing.wp_timeline(game, team), sw, team, opp, cdir / f"{tag}_wp.png"),
-            charts.drive_chart(d, team, opp, cdir / f"{tag}_drives.png"),
-            charts.penalty_game_chart(g_est, team, opp, cdir / f"{tag}_penalties.png"),
+            charts.wp_chart(swing.wp_timeline(game, team), sw, team, opp, cdir / f"{tag}_wp.png", week),
+            charts.gameplan_chart(gameplan.compare(season, game_id, team, "offense"), team, opp,
+                                  cdir / f"{tag}_gameplan.png", week),
+            charts.drive_chart(d, team, opp, cdir / f"{tag}_drives.png", week),
+            charts.penalty_game_chart(g_est, team, opp, cdir / f"{tag}_penalties.png", week),
             charts.erased_league_chart(totals, team, cdir / f"{tag}_erased_league.png"),
         ]
         w("\n## Charts\n\n" + "".join(f"![{p.stem}](../charts/{p.name})\n" for p in made if p.exists()))

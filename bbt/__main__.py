@@ -4,6 +4,7 @@
   prompts N            the two Claude in Chrome prompts (Sūmer + SūmerBrain, NFL Pro) for week N
   prompts N --sumerbrain-only   one prompt: SūmerBrain questions for every claim still open
   prompts N --film-only         one prompt: NFL Pro Film Room links for the week's clip list
+  charts N             draw week N's story charts from private/notes/<tag>_charts.json (brief does this too)
   ingest N FILE        merge a pasted Claude in Chrome reply into week N's paid data
   ingest-raw N FILE    build week N's paid data from pasted page text (when there's no JSON block)
   refresh              re-download nflverse data into data/bbt.duckdb
@@ -56,6 +57,14 @@ def cmd_prompts(a):
         return
     for path in prompts.build(a.week):
         print(path)
+
+
+def cmd_charts(a):
+    from bbt import data, viz
+    if not viz.load_specs(a.week):
+        sys.exit(f"No chart specs at {viz.specs_path(a.week)} (see docs/charts.md)")
+    for spec, path in viz.render_week(a.week, kicker=f"Week {a.week} · {config.TEAM} vs {data.opponent_for(a.week)}"):
+        print(f"{path}  ({spec['kind']}: {spec['title']})")
 
 
 def cmd_ingest(a):
@@ -209,7 +218,7 @@ def main(argv=None):
     s.add_argument("--film-only", action="store_true", help="just the NFL Pro Film Room links for the clip list")
     s.set_defaults(fn=cmd_prompts)
     for name, fn in [("run", cmd_run), ("check", cmd_check),
-                     ("brief", cmd_brief), ("opponent", cmd_opponent), ("grade", cmd_grade)]:
+                     ("brief", cmd_brief), ("charts", cmd_charts), ("opponent", cmd_opponent), ("grade", cmd_grade)]:
         s = sub.add_parser(name); s.add_argument("week", type=int); s.set_defaults(fn=fn)
     s = sub.add_parser("watchfor"); s.add_argument("week", type=int)
     s.add_argument("--metric", required=True); s.add_argument("--text", required=True)

@@ -1,85 +1,71 @@
-"""Ticket 15: charts you'd actually put in a post (PNG, light background).
+"""Ticket 15: the automatic charts every week gets from free data, drawn in the house style (bbt.viz).
 
-Style: thin marks, recessive grid, one accent color for the Giants, neutral gray for
-everyone else, text in ink colors (never the series color), selective labels.
+The story charts for a week's notes come from `private/notes/<tag>_charts.json` (see bbt.viz);
+these five need no spec: win probability, every drive, the flags, points erased league-wide, and
+the gameplan vs the Giants' usual.
 """
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
-import matplotlib
+import polars as pl
 
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
-import polars as pl  # noqa: E402
+from bbt import config, viz
+from bbt.viz import ACCENT, BASELINE, GRID, INK, INK_2, MUTED, NEUTRAL, OTHER, PLANE, SURFACE, Card, rbar
 
-from bbt import config  # noqa: E402
-
-SURFACE = "#fcfcfb"
-INK = "#0b0b0b"
-INK_2 = "#52514e"
-GRID = "#e4e3df"
-TEAM_COLOR = "#2a78d6"   # categorical slot 1 (blue)
-OPP_COLOR = "#eb6834"    # categorical slot 2 (orange)
-NEUTRAL = "#b9b8b2"
-CREDIT = "Data: nflverse"
+CREDIT = "nflverse play-by-play"
 
 
-def _style(ax, title: str, subtitle: str | None = None, ygrid: bool = True) -> None:
-    fig = ax.figure
-    fig.patch.set_facecolor(SURFACE)
-    ax.set_facecolor(SURFACE)
-    for side in ("top", "right", "left"):
-        ax.spines[side].set_visible(False)
-    ax.spines["bottom"].set_color(GRID)
-    ax.tick_params(colors=INK_2, labelsize=9, length=0)
-    if ygrid:
-        ax.grid(axis="y", color=GRID, linewidth=1)
-    else:
-        ax.grid(axis="y", visible=False)
-    ax.set_axisbelow(True)
-    fig.text(0.02, 0.965, title, fontsize=14, fontweight="bold", color=INK, ha="left", va="top")
-    if subtitle:
-        fig.text(0.02, 0.915, subtitle, fontsize=10, color=INK_2, ha="left", va="top")
-    fig.text(0.98, 0.015, f"{CREDIT}  ·  Big Blue Theory", fontsize=8, color=INK_2, ha="right")
+def _kicker(team: str, opp: str, week: int | None) -> str:
+    return f"Week {week} · {team} vs {opp}" if week else f"{team} vs {opp}"
 
 
-def _save(fig, path: Path) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(path, dpi=200, facecolor=SURFACE)
-    plt.close(fig)
-    return path
-
-
-def wp_chart(timeline: pl.DataFrame, swings: pl.DataFrame, team: str, opp: str, path: Path) -> Path:
-    fig, ax = plt.subplots(figsize=(10, 5.2))
-    fig.subplots_adjust(top=0.82, bottom=0.12, left=0.07, right=0.97)
+def wp_chart(timeline: pl.DataFrame, swings: pl.DataFrame, team: str, opp: str, path: Path,
+             week: int | None = None) -> Path:
     x, y = timeline["elapsed"].to_list(), (timeline["team_wp"] * 100).to_list()
-    ax.axhline(50, color=NEUTRAL, linewidth=1)
-    ax.fill_between(x, y, 50, color=TEAM_COLOR, alpha=0.10, linewidth=0)
-    ax.plot(x, y, color=TEAM_COLOR, linewidth=2, solid_joinstyle="round", solid_capstyle="round")
+    final = y[-1] if y else 50
+    low, high = (min(y), max(y)) if y else (50, 50)
+    title = (f"{team} won it, but it got as low as {low:.0f}%" if final > 50 and low < 35 else
+             f"{team} lost it after getting as high as {high:.0f}%" if final < 50 and high > 65 else
+             f"How {team}'s win probability moved vs {opp}")
+    card = Card(title, "Giants win probability after every play. Numbered dots are the three biggest swings.",
+                CREDIT, _kicker(team, opp, week), height=5.0)
+    ax = card.axes(left=0.42, bottom=0.3 + 0.2 * min(3, swings.height), right=0.45)
+    xmax = max(3600, max(x) if x else 3600)
+    ax.set_xlim(0, xmax)
     ax.set_ylim(0, 100)
-    ax.set_xlim(0, max(3600, max(x) if x else 3600))
-    ax.set_xticks([0, 900, 1800, 2700, 3600], ["Q1", "Q2", "Q3", "Q4", "End"])
+    for q in (900, 1800, 2700):
+        ax.axvline(q, color=GRID, lw=0.8, zorder=0)
+    if xmax > 3600:
+        ax.axvspan(3600, xmax, color=PLANE, lw=0, zorder=0)
+    ax.axhline(50, color=BASELINE, lw=1, zorder=1)
+    ax.set_xticks([450, 1350, 2250, 3150] + ([3600 + (xmax - 3600) / 2] if xmax > 3600 else []),
+                  ["Q1", "Q2", "Q3", "Q4"] + (["OT"] if xmax > 3600 else []))
     ax.set_yticks([0, 25, 50, 75, 100], ["0%", "25%", "50%", "75%", "100%"])
-
-    # Label the top 3 swings only
+    ax.tick_params(axis="y", labelcolor=MUTED, labelsize=9)
+    ax.tick_params(axis="x", pad=8)
+    ax.fill_between(x, y, 50, color=ACCENT, alpha=0.10, lw=0, zorder=1)
+    ax.plot(x, y, color=ACCENT, lw=viz.LINE_PT, solid_joinstyle="round", solid_capstyle="round", zorder=3)
     by_id = dict(zip(timeline["play_id"].to_list(), zip(x, y)))
+    key = []
     for i, row in enumerate(swings.head(3).iter_rows(named=True), 1):
         if row["play_id"] not in by_id:
             continue
         px, py = by_id[row["play_id"]]
-        ax.scatter([px], [py], s=40, color=TEAM_COLOR, edgecolor=SURFACE, linewidth=2, zorder=3)
-        sign = "+" if row["wpa_pts"] > 0 else ""
-        right_side = px > 0.8 * ax.get_xlim()[1]
-        ax.annotate(f"{i}. {sign}{row['wpa_pts']:.0f} pts", (px, py),
-                    xytext=(-8 if right_side else 6, 10 if py < 80 else -16), textcoords="offset points",
-                    ha="right" if right_side else "left", fontsize=9, color=INK)
-    final = y[-1] if y else 50
-    _style(ax, f"{team} win probability vs {opp}",
-           f"Ends at {final:.0f}%. Numbered dots are the three biggest swings (percentage points).")
-    return _save(fig, path)
+        ax.scatter([px], [py], s=150, color=INK, edgecolor=SURFACE, lw=1.6, zorder=5, clip_on=False)
+        ax.annotate(str(i), (px, py), ha="center", va="center", fontsize=8, fontweight="bold", color="white",
+                    zorder=6, family=viz._fam(), annotation_clip=False)
+        desc = re.sub(r"^\(\s*\d*:\d+\)\s*(\((Shotgun|No Huddle[^)]*)\)\s*)*", "", row["desc"] or "")
+        desc = desc if len(desc) <= 80 else desc[:80].rsplit(" ", 1)[0] + "…"
+        key.append(f"{i}  {row['wpa_pts']:+.0f} pts, Q{int(row['qtr'])} {row['time']}: {desc}")
+    for j, line in enumerate(key):  # the swings, spelled out under the plot
+        card.text(viz.MARGIN, card.H - card.bottom + 0.02 - 0.2 * (len(key) - j), line, size=8.5, color=INK_2)
+    ax.annotate(f"{final:.0f}%", (x[-1] if x else 0, final), xytext=(14, 0), textcoords="offset points",
+                va="center", fontsize=10.5, fontweight="semibold", color=INK, family=viz._fam(),
+                annotation_clip=False)
+    return card.save(path)
 
 
 SHORT_RESULT = {"Field goal": "FG", "Missed field goal": "Missed FG", "Turnover on downs": "Downs",
@@ -91,84 +77,156 @@ def _field_x(team: str):
     return lambda posteam, yl100: 100 - yl100 if posteam == team else yl100
 
 
-def drive_chart(drives: pl.DataFrame, team: str, opp: str, path: Path) -> Path:
+def drive_chart(drives: pl.DataFrame, team: str, opp: str, path: Path, week: int | None = None) -> Path:
     n = drives.height
-    fig, ax = plt.subplots(figsize=(10, 0.36 * n + 2))
-    fig.subplots_adjust(top=1 - 1.1 / (0.36 * n + 2), bottom=0.8 / (0.36 * n + 2), left=0.05, right=0.68)
-    fx = _field_x(team)
-    for i, d in enumerate(drives.iter_rows(named=True)):
-        start = fx(d["team"], d["start_yl100"])
-        end_yl100 = max(0, min(100, d["start_yl100"] - (d["yards"] or 0)))
-        if d["result"] == "Touchdown":
-            end_yl100 = 0
-        end = fx(d["team"], end_yl100)
-        color = TEAM_COLOR if d["team"] == team else OPP_COLOR
-        yrow = n - 1 - i
-        ax.plot([start, end], [yrow, yrow], color=color, linewidth=6, solid_capstyle="round")
-        ax.scatter([end], [yrow], s=36, color=color, edgecolor=SURFACE, linewidth=2, zorder=3)
+    scores = drives.filter(pl.col("result").is_in(["Touchdown", "Field goal"]) & (pl.col("team") == team)).height
+    card = Card(f"Every drive: {team} scored on {scores} of {drives.filter(pl.col('team') == team).height}",
+                f"Where each drive started and ended. {team} drives go right, {opp} drives go left.",
+                CREDIT, _kicker(team, opp, week), height=max(4.5, 2.3 + 0.3 * n),
+                legend=[(team, ACCENT, "sq"), (opp, OTHER, "sq")])
+    labels = []
+    for d in drives.iter_rows(named=True):
         result = SHORT_RESULT.get(d["result"], d["result"])
         if result == "End of half" and d["qtr"] >= 4:
             result = "End of game"
-        ax.text(102, yrow, f"Q{int(d['qtr'])} {d['team']}  {result} · {d['plays']} pl, {d['yards']} yds",
-                va="center", fontsize=8.5, color=INK, clip_on=False)
-    for gx in (0, 100):
-        ax.axvline(gx, color=INK_2, linewidth=1)
-    ax.axvline(50, color=GRID, linewidth=1)
+        labels.append(f"{result} · {d['plays']} pl, {d['yards']} yds")
+    lw = viz._label_col(card, labels, 9)
+    ax = card.axes(left=0.62, right=lw + 0.2, bottom=0.3)
     ax.set_xlim(0, 100)
-    ax.set_ylim(-0.8, n - 0.2)
+    ax.set_ylim(-0.7, n - 0.3)
     ax.set_yticks([])
     ax.set_xticks([0, 20, 50, 80, 100], [f"{team} goal", f"{team} 20", "50", f"{opp} 20", f"{opp} goal"])
-    ax.grid(False)
-    _style(ax, f"Every drive, {team} vs {opp}",
-           f"Blue = {team} (drives go right), orange = {opp} (drives go left). Dot = where it ended.",
-           ygrid=False)
-    return _save(fig, path)
+    ax.tick_params(axis="x", labelsize=8.5, labelcolor=MUTED, pad=6)
+    for gx in (0, 100):
+        ax.axvline(gx, color=BASELINE, lw=1, zorder=0)
+    for gx in (20, 50, 80):
+        ax.axvline(gx, color=GRID, lw=0.8, zorder=0)
+    fx = _field_x(team)
+    last_q = None
+    for i, (d, lab) in enumerate(zip(drives.iter_rows(named=True), labels)):
+        start = fx(d["team"], d["start_yl100"])
+        end_yl100 = 0 if d["result"] == "Touchdown" else max(0, min(100, d["start_yl100"] - (d["yards"] or 0)))
+        end = fx(d["team"], end_yl100)
+        yrow = n - 1 - i
+        mine = d["team"] == team
+        if end == start:
+            end = start + (0.6 if mine else -0.6)
+        rbar(ax, start, end, yrow, 0.56, ACCENT if mine else OTHER)
+        scored = d["result"] in ("Touchdown", "Field goal")
+        ax.annotate(lab, (100, yrow), xytext=(10, 0), textcoords="offset points", va="center", fontsize=9,
+                    color=INK if scored else INK_2, fontweight="semibold" if scored else "normal",
+                    family=viz._fam(), annotation_clip=False)
+        if d["qtr"] != last_q:
+            ax.annotate(f"Q{int(d['qtr'])}", (0, yrow), xytext=(-10, 0), textcoords="offset points", ha="right",
+                        va="center", fontsize=9, fontweight="semibold", color=INK_2, family=viz._fam(),
+                        annotation_clip=False)
+            last_q = d["qtr"]
+    return card.save(path)
+
+
+def _ordinal(k: int) -> str:
+    return f"{k}{'th' if 10 <= k % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(k % 10, 'th')}"
 
 
 def erased_league_chart(totals: pl.DataFrame, team: str, path: Path) -> Path:
-    t = totals.sort("ep_erased")
-    fig, ax = plt.subplots(figsize=(8, 9))
-    fig.subplots_adjust(top=0.88, bottom=0.07, left=0.10, right=0.95)
-    colors = [TEAM_COLOR if tm == team else NEUTRAL for tm in t["team"]]
-    ax.barh(t["team"].to_list(), t["ep_erased"].to_list(), height=0.62, color=colors)
-    ax.axvline(0, color=INK_2, linewidth=1)
-    ax.grid(axis="y", visible=False)
-    ax.grid(axis="x", color=GRID, linewidth=1)
-    for tick in ax.get_yticklabels():
-        if tick.get_text() == team:
-            tick.set_fontweight("bold")
-            tick.set_color(INK)
+    t = totals.sort("ep_erased", descending=True)
     me = t.filter(pl.col("team") == team)
-    if me.height:
-        v = me["ep_erased"][0]
-        idx = t["team"].to_list().index(team)
-        ax.text(v + (0.2 if v >= 0 else -0.2), idx, f"{v:.1f}", va="center",
-                ha="left" if v >= 0 else "right", fontsize=9, color=INK, fontweight="bold")
-    ax.set_xlabel("Expected points erased by the team's own penalties", color=INK_2, fontsize=9)
-    _style(ax, "Points erased by penalties",
-           f"Value of plays wiped out by each team's flags, {config.SEASON} season to date", ygrid=False)
-    return _save(fig, path)
+    rank = t["team"].to_list().index(team) + 1 if me.height else None
+    n_teams = t.height
+    where = (f"{_ordinal(rank)} most" if rank and rank <= n_teams / 2 else
+             f"{_ordinal(n_teams - rank + 1)} fewest" if rank else "")
+    title = (f"{team}'s flags have erased {me['ep_erased'][0]:.1f} expected points, {where} in the NFL"
+             if me.height else "Points erased by penalties")
+    card = Card(title, f"Value of plays wiped out by each team's own flags, {config.SEASON} season to date",
+                CREDIT + " (Big Blue Theory penalty ledger)", height=9.0)
+    rows = [{"label": r["team"], "value": r["ep_erased"]} for r in t.iter_rows(named=True)]
+    ax = card.axes(left=0.5, right=0.2)
+    n = len(rows)
+    vals = [r["value"] for r in rows]
+    span = (max(vals + [0]) - min(vals + [0])) or 1
+    ax.set_xlim(min(vals + [0]) - (0.14 if min(vals) < 0 else 0.02) * span, max(vals + [0]) + 0.12 * span)
+    ax.set_ylim(-0.7, n - 0.3)
+    ax.set_yticks(range(n)[::-1], [r["label"] for r in rows])
+    for lab in ax.get_yticklabels():
+        lab.set_fontsize(8.5)
+        lab.set_family(viz._fam())
+        if lab.get_text() == team:
+            lab.set_fontweight("bold")
+            lab.set_color(INK)
+    ax.tick_params(axis="x", labelsize=8.5, labelcolor=MUTED)
+    ax.grid(axis="x", color=GRID, lw=0.8)
+    ax.axvline(0, color=BASELINE, lw=1, zorder=3)
+    for i, r in enumerate(rows):
+        y = n - 1 - i
+        mine = r["label"] == team
+        rbar(ax, 0, r["value"], y, 0.62, ACCENT if mine else NEUTRAL)
+        if mine or i in (0, n - 1):
+            ax.annotate(f"{r['value']:.1f}".replace("-", "−"), (r["value"], y),
+                        xytext=(5 if r["value"] >= 0 else -5, 0), textcoords="offset points",
+                        ha="left" if r["value"] >= 0 else "right", va="center", fontsize=9,
+                        fontweight="bold" if mine else "normal", color=INK if mine else INK_2, family=viz._fam())
+    return card.save(path)
 
 
-def penalty_game_chart(est: pl.DataFrame, team: str, opp: str, path: Path) -> Path:
+def penalty_game_chart(est: pl.DataFrame, team: str, opp: str, path: Path, week: int | None = None) -> Path:
     """One bar per credited flag in the game: total EP cost to the team that committed it."""
     g = est.filter(pl.col("kind").is_in(["pre_snap", "wiped"])).sort("play_id")
     if g.is_empty():
         return path
-    labels = [f"Q{int(r['qtr'])} {r['time']}  {r['penalty_team']} {r['penalty_type']}"
-              for r in g.iter_rows(named=True)]
+    mine = g.filter(pl.col("penalty_team") == team)
+    cost = mine["total_cost_to_penalized"].fill_null(0).sum()
+    card = Card(f"{team}'s {mine.height} flags cost {cost:.1f} expected points" if mine.height
+                else f"No pre-snap or wiped-play flags on {team}",
+                "Pre-snap and wiped-play penalties, in game order: expected points each cost the team that "
+                "committed it", CREDIT, _kicker(team, opp, week), height=max(4.5, 2.4 + 0.34 * g.height),
+                legend=[(team, ACCENT, "sq"), (opp, OTHER, "sq")])
+    labels = [f"Q{int(r['qtr'])} {r['time']}  {r['penalty_type']}" for r in g.iter_rows(named=True)]
+    lw = viz._label_col(card, labels, 9)
+    ax = card.axes(left=lw + 0.14, bottom=0.1)
     vals = g["total_cost_to_penalized"].fill_null(0).to_list()
-    colors = [TEAM_COLOR if tm == team else OPP_COLOR for tm in g["penalty_team"]]
-    fig, ax = plt.subplots(figsize=(10, 0.34 * len(labels) + 2))
-    fig.subplots_adjust(top=1 - 1.1 / (0.34 * len(labels) + 2), bottom=0.9 / (0.34 * len(labels) + 2),
-                        left=0.38, right=0.95)
-    ypos = list(range(len(labels)))[::-1]
-    ax.barh(ypos, vals, height=0.6, color=colors)
-    ax.set_yticks(ypos, labels, fontsize=8.5)
-    ax.axvline(0, color=INK_2, linewidth=1)
-    ax.grid(axis="y", visible=False)
-    ax.grid(axis="x", color=GRID, linewidth=1)
-    ax.set_xlabel("Expected points the flag cost the team that committed it", color=INK_2, fontsize=9)
-    _style(ax, f"What the flags cost, {team} vs {opp}",
-           f"Pre-snap and wiped-play penalties only. Blue = {team}, orange = {opp}.", ygrid=False)
-    return _save(fig, path)
+    rows = [{"value": v} for v in vals]
+    ax.set_xlim(*viz._value_xlim(card, ax, rows, "{:+.1f}", 9))
+    n = len(vals)
+    ax.set_ylim(-0.6, n - 0.4)
+    ax.set_xticks([])
+    ax.set_yticks(range(n)[::-1], labels)
+    for lab, tm in zip(ax.get_yticklabels(), g["penalty_team"].to_list()):
+        lab.set_fontsize(9)
+        lab.set_family(viz._fam())
+        lab.set_color(INK if tm == team else INK_2)
+    ax.tick_params(axis="y", pad=8)
+    ax.axvline(0, color=BASELINE, lw=1, zorder=3)
+    for i, (v, tm) in enumerate(zip(vals, g["penalty_team"].to_list())):
+        y = n - 1 - i
+        rbar(ax, 0, v, y, 0.6, ACCENT if tm == team else OTHER)
+        ax.annotate(f"{v:+.1f}".replace("-", "−"), (v, y), xytext=(5 if v >= 0 else -5, 0),
+                    textcoords="offset points", ha="left" if v >= 0 else "right", va="center", fontsize=9,
+                    color=INK, family=viz._fam())
+    return card.save(path)
+
+
+RATE_METRICS = ["pass_rate", "early_down_pass", "shotgun", "no_huddle", "motion", "play_action", "success"]
+
+
+def gameplan_chart(cmp: pl.DataFrame, team: str, opp: str, path: Path, week: int | None = None) -> Path:
+    """This game vs the team's usual vs the league, for the rate metrics (one shared % scale)."""
+    rows = []
+    for r in cmp.filter(pl.col("metric").is_in(RATE_METRICS)).iter_rows(named=True):
+        if r["this_game"] is None:
+            continue
+        rows.append({"label": r["label"].replace(" (FTN)", "").replace(", dropbacks", " (dropbacks)"), "b": r["this_game"] * 100,
+                     "a": None if r[f"{team}_prior"] is None else r[f"{team}_prior"] * 100,
+                     "ref": None if r["league"] is None else r["league"] * 100})
+    if not rows:
+        return path
+    big = max((r for r in rows if r["a"] is not None and r["label"] != "Success rate"), key=lambda r: abs(r["b"] - r["a"]), default=rows[0])
+    title = (f"Biggest gameplan shift: {big['label'].split(' (')[0].lower()} {big['b']:.0f}%, "
+             f"usually {big['a']:.0f}%"
+             if big.get("a") is not None else f"{team}'s gameplan vs {opp}")
+    spec = {"kind": "dumbbell", "rows": rows, "fmt": "{:.0f}%", "xlim": [0, 100], "xticks": [0, 25, 50, 75, 100],
+            "names": [f"{team} usual (prior games)", "This game", "League"]}
+    card = Card(title, "Giants offense, real run and pass plays only. FTN rates appear once FTN charts the game.",
+                CREDIT + " / FTN Data via nflverse", _kicker(team, opp, week), height=viz._height(spec),
+                legend=viz._legend(spec))
+    viz.dumbbell(card, spec)
+    return card.save(path)
