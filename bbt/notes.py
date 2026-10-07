@@ -280,9 +280,9 @@ def open_claim_questions(week: int, game_label: str, source: str = "me") -> list
     if vpath.exists():
         for r in csv.DictReader(vpath.open()):
             claim = f"{r['who']}: {r['what']}"
+            custom_q = by_claim.pop(claim.lower(), None)   # pop first: an answered claim isn't re-asked
             if r.get("sumerbrain"):
                 continue
-            custom_q = by_claim.pop(claim.lower(), None)
             open_ = (r.get("verdict") or "") in ("can't check", "mixed", "")
             if not (open_ or custom_q):
                 continue

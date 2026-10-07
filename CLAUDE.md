@@ -41,7 +41,10 @@ It's a stats chatbot over Sūmer's charting, not a film room. Ask like a fan, no
    `python -m bbt ingest-raw N private/paid/<tag>_raw.txt`. Update the verdicts that were waiting on paid data.
    Sūmer conventions: split "comp/att" excludes sacks, share % is of dropbacks (att + sacks).
 3. **Charts.** For each point worth a picture, add a spec to `private/notes/<tag>_charts.json`
-   (kinds and fields in `docs/charts.md`). Title = plainly what the chart shows (who: measure, split), no catchy headlines;
+   (kinds and fields in `docs/charts.md`). A chart must show **why/how** (cause beside effect, this game
+   against history or the league, where on the field), never just restate the verdict's numbers.
+   Dig for the explaining data first (free data across 2024–26, FTN flags, snap counts); if the why
+   needs Sūmer splits we don't have, add a fan-style SūmerBrain follow-up instead of a thin chart. Title = plainly what the chart shows (who: measure, split), no catchy headlines;
    subtitle = sample/caveat only; full player names, checked against the roster;
    source names SūmerBrain when it's SūmerBrain; `claim` = the note it backs. `python -m bbt charts N`,
    then open every PNG and look at it before sending. The five free-data charts build themselves.

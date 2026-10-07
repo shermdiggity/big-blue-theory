@@ -185,6 +185,8 @@ def test_open_claims_go_to_sumerbrain_and_answers_are_filed(tmp_path, monkeypatc
     assert "quarter" not in qs[1]["question"].lower()                        # no film-style asks
     notes.record_sumerbrain(4, {"A: open": {"answer_1": "7 of 9", "answer_2": "7 of 9", "consistent": True}})
     assert [q["claim"] for q in notes.open_claim_questions(4, "game")] == ["C: asked thing"]  # answered drops out
+    notes.record_sumerbrain(4, {"C: asked": {"answer_1": "x"}})
+    assert notes.open_claim_questions(4, "game") == []   # an answered hand-written question isn't re-asked
 
 
 def test_clock_refs_are_found_in_text():

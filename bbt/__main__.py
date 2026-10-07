@@ -60,10 +60,10 @@ def cmd_prompts(a):
 
 
 def cmd_charts(a):
-    from bbt import data, viz
+    from bbt import viz
     if not viz.load_specs(a.week):
         sys.exit(f"No chart specs at {viz.specs_path(a.week)} (see docs/charts.md)")
-    for spec, path in viz.render_week(a.week, kicker=f"Week {a.week} · {config.TEAM} vs {data.opponent_for(a.week)}"):
+    for spec, path in viz.render_week(a.week):
         print(f"{path}  ({spec['kind']}: {spec['title']})")
 
 

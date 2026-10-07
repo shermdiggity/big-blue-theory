@@ -127,6 +127,11 @@ class Card:
                                                                      1 - (yc + 0.08) / height],
                                           color=color, lw=1.6))
                     x += 0.18
+                elif mark in ("dot", "ring"):
+                    fig.add_artist(Line2D([(x + 0.06) / width], [1 - yc / height], marker="o", markersize=7,
+                                          color=color if mark == "dot" else SURFACE,
+                                          markeredgecolor=color if mark == "ring" else SURFACE, markeredgewidth=1.4))
+                    x += 0.19
                 else:
                     fig.add_artist(FancyBboxPatch((x / width, 1 - (yc + 0.06) / height), 0.12 / width,
                                                   0.12 / height, boxstyle="round,pad=0,rounding_size=0.004",
@@ -571,8 +576,241 @@ def tiles(card: Card, spec: dict):
             y += card.text(x0 + 0.2, y, line, size=9.5, color=INK_2) + 0.03
 
 
+GRAY_MARK = "#8f8e88"   # non-highlighted dots on a dot chart
+
+
+def _groups_under(ax, groups, size=9):
+    """Season/period brackets under the x labels: [{"label": "2025", "from": 0, "to": 16}]."""
+    for g in groups or []:
+        a, b = g["from"] - 0.35, g["to"] + 0.35
+        ax.plot([a, b], [-0.16, -0.16], color=BASELINE, lw=1, transform=ax.get_xaxis_transform(), clip_on=False)
+        ax.text((a + b) / 2, -0.19, g["label"], transform=ax.get_xaxis_transform(), ha="center", va="top",
+                fontsize=size, fontweight="semibold", color=INK_2, family=_fam())
+
+
+def slopes(card: Card, spec: dict):
+    """Small multiples over the same x (weeks or seasons), one measure per panel on its own scale.
+    Put what changed (the inputs) beside what happened (the result): that's the why."""
+    xs, ps = spec["x"], spec["panels"]
+    n, k = len(xs), len(ps)
+    gutter = 0.42
+    width = (card.W - 2 * MARGIN - gutter * (k - 1)) / k
+    hi_i = xs.index(spec["highlight_x"]) if spec.get("highlight_x") in xs else None
+    titles = [card.wrap(p["title"], width, 10.5, "semibold") for p in ps]
+    th = max(len(t) for t in titles) * 0.2
+    any_key = any(p.get("ref") or any(s_.get("name") for s_ in (p.get("series") or [])) for p in ps)
+    for j, (p, tlines) in enumerate(zip(ps, titles)):
+        x0 = MARGIN + j * (width + gutter)
+        y = card.top - 0.12
+        for line in tlines:
+            y += card.text(x0, y, line, size=10.5, weight="semibold", color=INK) + 0.03
+        ax = card.axes(x0=x0, x1=x0 + width, top=th + (0.42 if any_key else 0.3), bottom=0.42 if spec.get("groups") else 0.3)
+        series = p.get("series") or [{"values": p.get("values") or [None] * n, "ranges": p.get("ranges")}]
+        vals = [v for s_ in series for v in s_["values"] if v is not None]
+        vals += [v for s_ in series for r in (s_.get("ranges") or []) if r for v in r]
+        if p.get("ref"):
+            vals.append(p["ref"]["value"])
+        lo, hi = p.get("ylim") or [min(vals + [0]) if min(vals) >= 0 else min(vals), max(vals + [0])]
+        pad = (hi - lo or 1) * 0.22
+        ax.set_ylim(lo - (pad * 0.5 if lo < 0 or p.get("ylim") is None and min(vals) < 0 else 0), hi + pad)
+        ax.set_xlim(-0.45, n - 0.55)
+        ax.set_yticks([])
+        ax.set_xticks(range(n), xs)
+        for i, lab in enumerate(ax.get_xticklabels()):
+            lab.set_family(_fam())
+            lab.set_fontsize(9)
+            lab.set_color(INK if i == hi_i else MUTED)
+            lab.set_fontweight("semibold" if i == hi_i else "normal")
+        ax.tick_params(axis="x", pad=6)
+        ax.axhline(0 if lo <= 0 <= hi else ax.get_ylim()[0], color=BASELINE, lw=1, zorder=1)
+        if hi_i is not None:
+            ax.axvspan(hi_i - 0.38, hi_i + 0.38, color=PLANE, lw=0, zorder=0)
+        if spec.get("event"):
+            ev = spec["event"]
+            ax.axvline(ev["at"], color=INK_2, lw=1, ls=(0, (3, 2)), zorder=1)
+            if j == 0 and ev.get("label"):
+                ax.annotate(ev["label"], (ev["at"], ax.get_ylim()[1]), xytext=(-4, -2), textcoords="offset points",
+                            ha="right", va="top", fontsize=8.5, color=INK_2, family=_fam())
+        key = [(s_["name"], NEUTRAL if s_.get("muted") else SERIES[si], "line")
+               for si, s_ in enumerate(p.get("series") or []) if s_.get("name")]
+        if p.get("ref"):
+            ax.axhline(p["ref"]["value"], color=MUTED, lw=1, ls=(0, (2, 2)), zorder=1)
+            key.append((f"{p['ref'].get('label', '')} {_fmt(p.get('fmt', '{:.0f}'), p['ref']['value'])}", MUTED, "dash"))
+        kx = x0
+        for name, col, mark in key:  # a one-line key under the panel title
+            ky = card.top - 0.12 + th + 0.1
+            yf = 1 - ky / card.H
+            card.fig.add_artist(Line2D([kx / card.W, (kx + 0.2) / card.W], [yf, yf], color=col, lw=LINE_PT,
+                                       ls=(0, (2, 1.5)) if mark == "dash" else "-"))
+            card.text(kx + 0.26, ky - 0.075, name, size=8.5, color=INK_2)
+            kx += 0.26 + card.measure(name, 8.5)[0] + 0.18
+        fmt = p.get("fmt", "{:.0f}")
+        for si, s_ in enumerate(series):
+            c = NEUTRAL if s_.get("muted") else SERIES[si]
+            pts = [(i, v) for i, v in enumerate(s_["values"]) if v is not None]
+            rng = s_.get("ranges") or []
+            for i, r in enumerate(rng):
+                if r:
+                    ax.plot([i, i], r, color=c, lw=9, alpha=0.35, solid_capstyle="round", zorder=2)
+                    if i + 1 < len(rng) and rng[i + 1] == r:
+                        continue  # same range next door: label the pair once, centered
+                    j0 = i
+                    while j0 > 0 and rng[j0 - 1] == r:
+                        j0 -= 1
+                    on = hi_i is not None and j0 <= hi_i <= i
+                    ax.annotate(f"{_fmt(fmt, r[0]).rstrip('%')}–{_fmt(fmt, r[1])}", ((j0 + i) / 2, r[1]),
+                                xytext=(0, 8), textcoords="offset points", ha="center", family=_fam(),
+                                fontsize=9.5 if on else 8.5, fontweight="semibold" if on else "normal",
+                                color=INK if on else INK_2)
+            if len(pts) > 1:
+                ax.plot([q[0] for q in pts], [q[1] for q in pts], color=c, lw=LINE_PT, zorder=3,
+                        solid_capstyle="round", solid_joinstyle="round")
+            ax.scatter([q[0] for q in pts], [q[1] for q in pts], s=DOT, color=c, edgecolor=SURFACE, lw=1.5, zorder=4)
+            ylo, yhi = ax.get_ylim()
+            for i, v in pts:
+                prv = nxt = None
+                on = i == hi_i
+                if len(series) > 1:
+                    if not on and i != pts[0][0]:
+                        continue  # several lines: label the first point and the one that matters
+                    others = [o["values"][i] for o in series if o is not s_ and o["values"][i] is not None]
+                    below = bool(others) and v < max(others)
+                else:
+                    prv = s_["values"][i - 1] if i else None
+                    nxt = s_["values"][i + 1] if i + 1 < n else None
+                    nb = [w for w in (prv, nxt) if w is not None]
+                    below = bool(nb) and v < min(nb)
+                dx, ha = 0, "center"
+                if len(series) == 1 and prv is not None and nxt is not None:
+                    if prv > v > nxt:      # falling through this point: label up and to the right
+                        dx, ha = 7, "left"
+                    elif prv < v < nxt:    # rising: up and to the left
+                        dx, ha = -7, "right"
+                if below and (v - ylo) < 0.12 * (yhi - ylo):
+                    below = False
+                if len(series) > 1 and i == n - 1:   # last column: beside the dot, clear of event lines
+                    dx, ha = 8, "left"
+                dy = (-12 if below else 10) if not (ha == "left" and len(series) > 1) else (-6 if below else 6)
+                ax.annotate(_fmt(fmt, v), (i, v), xytext=(dx, dy), textcoords="offset points", annotation_clip=False,
+                            ha=ha, va="center", fontsize=9.5 if on else 8.5, family=_fam(),
+                            fontweight="semibold" if on else "normal", color=INK if on else INK_2)
+
+        if spec.get("groups"):
+            _groups_under(ax, spec["groups"])
+
+
+def stack(card: Card, spec: dict):
+    """Columns split into parts (e.g. sacks: on the QB vs not), across games."""
+    xs, parts, vals = spec["x"], spec["parts"], spec["values"]
+    hi = set(spec.get("highlight") or [])
+    ax = card.axes(bottom=0.55 if spec.get("groups") else 0.3)
+    n = len(xs)
+    tot = [sum((v[i] or 0) for v in vals) for i in range(n)]
+    ax.set_ylim(0, max(tot) * 1.2 or 1)
+    ax.set_xlim(-0.6, n - 0.4)
+    ax.set_yticks([])
+    ax.set_xticks(range(n), xs)
+    for lab, x in zip(ax.get_xticklabels(), xs):
+        lab.set_family(_fam())
+        lab.set_fontsize(8.5)
+        lab.set_color(INK if x in hi else MUTED)
+        lab.set_fontweight("semibold" if x in hi else "normal")
+    ax.axhline(0, color=BASELINE, lw=1, zorder=3)
+    colors = [ACCENT, NEUTRAL, NEUTRAL_LIGHT]
+    w = 0.64
+    for i in range(n):
+        base = 0
+        top_k = max((k for k in range(len(parts)) if vals[k][i]), default=None)
+        for k in range(len(parts)):
+            v = vals[k][i] or 0
+            if not v:
+                continue
+            if k == top_k:
+                rbar(ax, base, base + v, i, w, colors[k], horizontal=False)
+            else:
+                ax.add_patch(Rectangle((i - w / 2, base), w, v, facecolor=colors[k], edgecolor=SURFACE,
+                                       lw=GAP_PT, zorder=2))
+            base += v
+        on = xs[i] in hi
+        if tot[i]:
+            ax.annotate(f"{tot[i]:g}", (i, tot[i]), xytext=(0, 4), textcoords="offset points", ha="center",
+                        va="bottom", fontsize=9.5 if on else 8.5, fontweight="semibold" if on else "normal",
+                        color=INK if on else INK_2, family=_fam())
+    if spec.get("groups"):
+        _groups_under(ax, spec["groups"])
+
+
+def pairs(card: Card, spec: dict):
+    """Actual vs expected per item (filled dot vs ring), on one shared scale."""
+    xs, exp, act = spec["x"], spec["expected"], spec["actual"]
+    hi = set(spec.get("highlight") or [])
+    fmt = spec.get("fmt", "{:.1f}")
+    lo, top = spec.get("ylim") or [0, max(exp + act) * 1.15]
+    tw = max(card.measure(_fmt(fmt, t), 8.5)[0] for t in (spec.get("yticks") or [lo, top]))
+    ax = card.axes(left=tw + 0.1, bottom=0.55 if spec.get("groups") else 0.3)
+    n = len(xs)
+    ax.set_ylim(lo, top)
+    ax.set_xlim(-0.6, n - 0.4)
+    ticks = spec.get("yticks") or [t for t in ax.get_yticks() if lo <= t <= top]
+    ax.set_yticks(ticks, [_fmt(fmt, t) for t in ticks])
+    ax.tick_params(axis="y", labelcolor=MUTED, labelsize=8.5)
+    ax.grid(axis="y", color=GRID, lw=0.8)
+    ax.set_xticks(range(n), xs)
+    for lab, x in zip(ax.get_xticklabels() + ax.get_yticklabels(), xs + [None] * 99):
+        lab.set_family(_fam())
+    for lab, x in zip(ax.get_xticklabels(), xs):
+        lab.set_fontsize(8.5)
+        lab.set_color(INK if x in hi else MUTED)
+        lab.set_fontweight("semibold" if x in hi else "normal")
+    for i, (e, a) in enumerate(zip(exp, act)):
+        on = xs[i] in hi
+        ax.plot([i, i], [e, a], color=ACCENT if on else NEUTRAL, lw=LINE_PT, zorder=2, alpha=0.5 if on else 1)
+        ax.scatter([i], [e], s=DOT, facecolor=SURFACE, edgecolor=INK_2, lw=1.4, zorder=3)
+        ax.scatter([i], [a], s=DOT + 20, color=ACCENT if on else GRAY_MARK, edgecolor=SURFACE, lw=1.4, zorder=4)
+        if on:
+            ax.annotate(_fmt(fmt, a), (i, a), xytext=(9, 0), textcoords="offset points", va="center",
+                        fontsize=10, fontweight="semibold", color=INK, family=_fam())
+            ax.annotate(_fmt(fmt, e), (i, e), xytext=(9, 0), textcoords="offset points", va="center",
+                        fontsize=9, color=INK_2, family=_fam())
+    if spec.get("groups"):
+        _groups_under(ax, spec["groups"])
+
+
+def gapmap(card: Card, spec: dict):
+    """The offensive line from behind the play: run direction bars (height = runs, color = EPA sign)
+    over each lineman, and red dots under each lineman for poorly graded run blocks."""
+    ol, runs = spec["linemen"], spec["runs"]
+    ax = card.axes(bottom=0.05, left=0.1, right=0.1)
+    nmax = max(r["n"] for r in runs)
+    ax.set_xlim(-1.7, len(ol) + 0.7)
+    ax.set_ylim(-2.3, nmax + 2.6)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    base = 0.55
+    for i, m in enumerate(ol):
+        ax.add_patch(FancyBboxPatch((i - 0.36, -0.36), 0.72, 0.72, boxstyle="round,pad=0,rounding_size=0.12",
+                                    facecolor=PLANE, edgecolor=BASELINE, lw=1, zorder=2))
+        ax.text(i, 0, m["pos"], ha="center", va="center", fontsize=10.5, fontweight="semibold", color=INK,
+                family=_fam(), zorder=3)
+        ax.text(i, -0.55, m["name"], ha="center", va="top", fontsize=8.5, color=INK_2, family=_fam())
+        f = m.get("flags", 0)
+        for d in range(f):
+            ax.scatter([i + (d - (f - 1) / 2) * 0.17], [-1.35], s=46, color=NEG, edgecolor=SURFACE, lw=1.2, zorder=3)
+    ax.plot([-1.6, len(ol) - 0.4], [base - 0.12] * 2, color=BASELINE, lw=1, ls=(0, (3, 2)), zorder=1)
+    for r in runs:
+        x, v = r["at"], r["epa"]
+        rbar(ax, base, base + r["n"], x, 0.42, NEG if v < 0 else POS, horizontal=False)
+        ax.annotate(_fmt(spec.get("fmt", "{:+.2f}"), v), (x, base + r["n"]), xytext=(0, 15), textcoords="offset points",
+                    ha="center", va="bottom", fontsize=10, fontweight="semibold", color=INK, family=_fam())
+        ax.annotate(f"{r['n']} run{'s' if r['n'] != 1 else ''}", (x, base + r["n"]), xytext=(0, 3), textcoords="offset points", ha="center",
+                    va="bottom", fontsize=8.5, color=MUTED, family=_fam())
+    for x, lab in spec.get("side_labels", []):
+        ax.text(x, -1.95, lab, ha="center", va="center", fontsize=8.5, color=MUTED, family=_fam())
+
+
 KINDS = {"bars": bars, "trend": trend, "grouped": grouped, "split": split, "diverging": diverging,
-         "dumbbell": dumbbell, "panels": panels, "tiles": tiles}
+         "dumbbell": dumbbell, "panels": panels, "tiles": tiles, "slopes": slopes, "stack": stack,
+         "pairs": pairs, "gapmap": gapmap}
 
 
 def _legend(spec: dict) -> list[tuple[str, str, str]] | None:
@@ -587,6 +825,13 @@ def _legend(spec: dict) -> list[tuple[str, str, str]] | None:
     if kind == "dumbbell":
         a, b, ref = spec.get("names", ["Usual", "This game", "League"])
         return [(b, ACCENT, "sq"), (a, NEUTRAL, "sq"), (ref, INK_2, "tick")]
+    if kind == "stack":
+        return [(p, [ACCENT, NEUTRAL, NEUTRAL_LIGHT][k], "sq") for k, p in enumerate(spec["parts"])]
+    if kind == "pairs":
+        return [(spec.get("names", ["Actual", "Expected"])[0], GRAY_MARK, "dot"),
+                (spec.get("names", ["Actual", "Expected"])[1], INK_2, "ring")]
+    if kind == "gapmap":
+        return [("EPA per run below 0", NEG, "sq"), ("above 0", POS, "sq"), (spec.get("flag_label", "flag"), NEG, "dot")]
     return spec.get("legend")
 
 
@@ -596,6 +841,8 @@ def _height(spec: dict) -> float:
     rows = spec.get("rows") or []
     if spec["kind"] == "tiles":
         return 4.0
+    if spec["kind"] == "gapmap":
+        return 5.2
     if spec["kind"] == "dumbbell":
         return max(4.5, 2.8 + 0.42 * len(rows))
     if spec["kind"] in ("split", "diverging") or (spec["kind"] == "bars"

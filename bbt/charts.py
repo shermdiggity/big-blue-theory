@@ -18,10 +18,6 @@ from bbt.viz import ACCENT, BASELINE, GRID, INK, INK_2, MUTED, NEUTRAL, OTHER, P
 CREDIT = "nflverse play-by-play"
 
 
-def _kicker(team: str, opp: str, week: int | None) -> str:
-    return f"Week {week} · {team} vs {opp}" if week else f"{team} vs {opp}"
-
-
 def wp_chart(timeline: pl.DataFrame, swings: pl.DataFrame, team: str, opp: str, path: Path,
              week: int | None = None) -> Path:
     x, y = timeline["elapsed"].to_list(), (timeline["team_wp"] * 100).to_list()
@@ -29,7 +25,7 @@ def wp_chart(timeline: pl.DataFrame, swings: pl.DataFrame, team: str, opp: str, 
     low, high = (min(y), max(y)) if y else (50, 50)
     title = f"{team} win probability vs {opp}"
     card = Card(title, "After every play. Numbered dots: the three biggest swings, listed below.",
-                CREDIT, _kicker(team, opp, week), height=5.0)
+                CREDIT, height=5.0)
     ax = card.axes(left=0.42, bottom=0.3 + 0.2 * min(3, swings.height), right=0.45)
     xmax = max(3600, max(x) if x else 3600)
     ax.set_xlim(0, xmax)
@@ -79,7 +75,7 @@ def drive_chart(drives: pl.DataFrame, team: str, opp: str, path: Path, week: int
     n = drives.height
     card = Card(f"Every drive, {team} vs {opp}",
                 f"Start to end of each drive. {team} drives go right, {opp} drives go left.",
-                CREDIT, _kicker(team, opp, week), height=max(4.5, 2.3 + 0.3 * n),
+                CREDIT, height=max(4.5, 2.3 + 0.3 * n),
                 legend=[(team, ACCENT, "sq"), (opp, OTHER, "sq")])
     labels = []
     for d in drives.iter_rows(named=True):
@@ -161,7 +157,7 @@ def penalty_game_chart(est: pl.DataFrame, team: str, opp: str, path: Path, week:
     if g.is_empty():
         return path
     card = Card(f"Penalties, {team} vs {opp}: expected points each flag cost",
-                "Pre-snap and wiped-play penalties in game order, cost to the team that committed it", CREDIT, _kicker(team, opp, week), height=max(4.5, 2.4 + 0.34 * g.height),
+                "Pre-snap and wiped-play penalties in game order, cost to the team that committed it", CREDIT, height=max(4.5, 2.4 + 0.34 * g.height),
                 legend=[(team, ACCENT, "sq"), (opp, OTHER, "sq")])
     labels = [f"Q{int(r['qtr'])} {r['time']}  {r['penalty_type']}" for r in g.iter_rows(named=True)]
     lw = viz._label_col(card, labels, 9)
@@ -206,7 +202,7 @@ def gameplan_chart(cmp: pl.DataFrame, team: str, opp: str, path: Path, week: int
     spec = {"kind": "dumbbell", "rows": rows, "fmt": "{:.0f}%", "xlim": [0, 100], "xticks": [0, 25, 50, 75, 100],
             "names": [f"{team} usual (prior games)", "This game", "League"]}
     card = Card(title, "Giants offense, real run and pass plays only. FTN rates appear once FTN charts the game.",
-                CREDIT + " / FTN Data via nflverse", _kicker(team, opp, week), height=viz._height(spec),
+                CREDIT + " / FTN Data via nflverse", height=viz._height(spec),
                 legend=viz._legend(spec))
     viz.dumbbell(card, spec)
     return card.save(path)

@@ -150,7 +150,7 @@ def build(week: int, team: str = config.TEAM) -> str:
     has_ftn = bool(game["has_ftn"].fill_null(False).any())
 
     packet_path = packet.build(week, team)  # appendix + the automatic charts
-    story = viz.render_week(week, kicker=f"Week {week} · {team} vs {opp}")  # charts from <tag>_charts.json
+    story = viz.render_week(week)  # charts from <tag>_charts.json
     placed: set[str] = set()
 
     out = [f"# Week {week} notes doc: {team} {nyg_pts}, {opp} {opp_pts} ({result})\n",
