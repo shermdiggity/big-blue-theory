@@ -41,7 +41,8 @@ It's a stats chatbot over Sūmer's charting, not a film room. Ask like a fan, no
    `python -m bbt ingest-raw N private/paid/<tag>_raw.txt`. Update the verdicts that were waiting on paid data.
    Sūmer conventions: split "comp/att" excludes sacks, share % is of dropbacks (att + sacks).
 3. **Charts.** For each point worth a picture, add a spec to `private/notes/<tag>_charts.json`
-   (kinds and fields in `docs/charts.md`). Title = the takeaway; subtitle = what's measured + sample;
+   (kinds and fields in `docs/charts.md`). Title = plainly what the chart shows (who: measure, split), no catchy headlines;
+   subtitle = sample/caveat only; full player names, checked against the roster;
    source names SūmerBrain when it's SūmerBrain; `claim` = the note it backs. `python -m bbt charts N`,
    then open every PNG and look at it before sending. The five free-data charts build themselves.
 4. `python -m bbt brief N` → `private/briefs/<tag>.md`, the doc they write from (it also builds the

@@ -1,12 +1,12 @@
 """The Big Blue Theory chart look, and the chart kinds the pipeline can draw.
 
 Every chart is a 1600 x 900 "card" (taller if it needs rows): brand rule and kicker, a headline
-that states the takeaway, a subtitle that says what's measured, the plot, and a footer with the
+that says what the chart shows, a subtitle that says what's measured, the plot, and a footer with the
 source. Charts are described as plain dicts (the week's `private/notes/<tag>_charts.json`), so the
 session writes data + words and this module does the drawing:
 
     {"id": "pass_rush", "kind": "bars", "orientation": "v",
-     "title": "Player A's best week by far", "subtitle": "Pass-rush win rate by week",
+     "title": "Player A: pass-rush win rate by week", "subtitle": "Pressures above each bar",
      "source": "Sūmer charting", "fmt": "{:.0f}%", "highlight": ["Wk 3"],
      "rows": [{"label": "Wk 1", "value": 12}, ...]}     (made-up numbers; real ones stay in private/)
 
@@ -139,8 +139,6 @@ class Card:
         self.top = y + 0.22
         fig.add_artist(Line2D([MARGIN / width, 1 - MARGIN / width], [FOOTER / height] * 2, color=GRID, lw=0.8))
         self.text(MARGIN, height - FOOTER + 0.11, f"Source: {source}", size=8, color=MUTED)
-        self.text(width - MARGIN, height - FOOTER + 0.10, "BIG BLUE THEORY", size=9, weight="semibold",
-                  color=INK_2, head=True, ha="right")
         self.bottom = FOOTER + 0.18
 
     # text helpers (inches from top)

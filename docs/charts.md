@@ -1,8 +1,8 @@
 # Charts
 
 Every chart is a 1600 × 900 PNG card (taller when it has many rows) in one house style:
-navy brand rule, kicker (`WEEK 4 · NYG VS ARI`), a headline that states the takeaway, a subtitle
-that says what's measured, the plot, and a footer with the source. Fonts are Barlow / Barlow
+navy rule, kicker (`WEEK 4 · NYG VS ARI`), a plain title that says what the chart shows, a subtitle
+with the sample or caveat, the plot, and a footer with the source. No watermark. Fonts are Barlow / Barlow
 Condensed (SIL Open Font License, bundled in `bbt/fonts/`). Colors were checked with a palette
 validator: Giants blue `#2a78d6` is the accent, orange `#eb6834` the second series, gray for
 everything de-emphasised, red `#e34948` for the bad side of a diverging chart.
@@ -19,7 +19,7 @@ drive, the flags, points erased league-wide. `bbt week N` / `bbt brief N` draw t
 ```json
 {"charts": [
   {"id": "pass_rush", "kind": "bars", "orientation": "v", "claim": "Player A: stud",
-   "title": "Player A's best week by far", "subtitle": "Pass-rush win rate by week, with pressures",
+   "title": "Player A: pass-rush win rate by week", "subtitle": "Pressures above each bar",
    "source": "Sūmer charting via SūmerBrain", "fmt": "{:.0f}%", "highlight": ["Wk 3"],
    "rows": [{"label": "Wk 1", "value": 12, "note": "2 pressures"},
             {"label": "Wk 2", "value": 10, "note": "1 pressure"},
@@ -29,7 +29,7 @@ drive, the flags, points erased league-wide. `bbt week N` / `bbt brief N` draw t
 
 (Numbers above are made up. Real paid numbers only ever go in `private/`.)
 
-Common fields: `id` (file name), `kind`, `title` (the takeaway, not the measure), `subtitle`
+Common fields: `id` (file name), `kind`, `title` (what the chart shows: "Abdul Carter: pass-rush win rate by week", no spin), `subtitle`
 (what's measured, sample, caveat), `source` (say SūmerBrain when it's SūmerBrain), `claim`
 (start of `who: what` to place it under that note), optional `height`, `kicker`.
 

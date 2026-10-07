@@ -27,10 +27,8 @@ def wp_chart(timeline: pl.DataFrame, swings: pl.DataFrame, team: str, opp: str, 
     x, y = timeline["elapsed"].to_list(), (timeline["team_wp"] * 100).to_list()
     final = y[-1] if y else 50
     low, high = (min(y), max(y)) if y else (50, 50)
-    title = (f"{team} won it, but it got as low as {low:.0f}%" if final > 50 and low < 35 else
-             f"{team} lost it after getting as high as {high:.0f}%" if final < 50 and high > 65 else
-             f"How {team}'s win probability moved vs {opp}")
-    card = Card(title, "Giants win probability after every play. Numbered dots are the three biggest swings.",
+    title = f"{team} win probability vs {opp}"
+    card = Card(title, "After every play. Numbered dots: the three biggest swings, listed below.",
                 CREDIT, _kicker(team, opp, week), height=5.0)
     ax = card.axes(left=0.42, bottom=0.3 + 0.2 * min(3, swings.height), right=0.45)
     xmax = max(3600, max(x) if x else 3600)
@@ -79,9 +77,8 @@ def _field_x(team: str):
 
 def drive_chart(drives: pl.DataFrame, team: str, opp: str, path: Path, week: int | None = None) -> Path:
     n = drives.height
-    scores = drives.filter(pl.col("result").is_in(["Touchdown", "Field goal"]) & (pl.col("team") == team)).height
-    card = Card(f"Every drive: {team} scored on {scores} of {drives.filter(pl.col('team') == team).height}",
-                f"Where each drive started and ended. {team} drives go right, {opp} drives go left.",
+    card = Card(f"Every drive, {team} vs {opp}",
+                f"Start to end of each drive. {team} drives go right, {opp} drives go left.",
                 CREDIT, _kicker(team, opp, week), height=max(4.5, 2.3 + 0.3 * n),
                 legend=[(team, ACCENT, "sq"), (opp, OTHER, "sq")])
     labels = []
@@ -124,20 +121,10 @@ def drive_chart(drives: pl.DataFrame, team: str, opp: str, path: Path, week: int
     return card.save(path)
 
 
-def _ordinal(k: int) -> str:
-    return f"{k}{'th' if 10 <= k % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(k % 10, 'th')}"
-
-
 def erased_league_chart(totals: pl.DataFrame, team: str, path: Path) -> Path:
     t = totals.sort("ep_erased", descending=True)
-    me = t.filter(pl.col("team") == team)
-    rank = t["team"].to_list().index(team) + 1 if me.height else None
-    n_teams = t.height
-    where = (f"{_ordinal(rank)} most" if rank and rank <= n_teams / 2 else
-             f"{_ordinal(n_teams - rank + 1)} fewest" if rank else "")
-    title = (f"{team}'s flags have erased {me['ep_erased'][0]:.1f} expected points, {where} in the NFL"
-             if me.height else "Points erased by penalties")
-    card = Card(title, f"Value of plays wiped out by each team's own flags, {config.SEASON} season to date",
+    title = "Expected points erased by each team's own penalties"
+    card = Card(title, f"Value of plays wiped out by flags, {config.SEASON} season to date",
                 CREDIT + " (Big Blue Theory penalty ledger)", height=9.0)
     rows = [{"label": r["team"], "value": r["ep_erased"]} for r in t.iter_rows(named=True)]
     ax = card.axes(left=0.5, right=0.2)
@@ -173,12 +160,8 @@ def penalty_game_chart(est: pl.DataFrame, team: str, opp: str, path: Path, week:
     g = est.filter(pl.col("kind").is_in(["pre_snap", "wiped"])).sort("play_id")
     if g.is_empty():
         return path
-    mine = g.filter(pl.col("penalty_team") == team)
-    cost = mine["total_cost_to_penalized"].fill_null(0).sum()
-    card = Card(f"{team}'s {mine.height} flags cost {cost:.1f} expected points" if mine.height
-                else f"No pre-snap or wiped-play flags on {team}",
-                "Pre-snap and wiped-play penalties, in game order: expected points each cost the team that "
-                "committed it", CREDIT, _kicker(team, opp, week), height=max(4.5, 2.4 + 0.34 * g.height),
+    card = Card(f"Penalties, {team} vs {opp}: expected points each flag cost",
+                "Pre-snap and wiped-play penalties in game order, cost to the team that committed it", CREDIT, _kicker(team, opp, week), height=max(4.5, 2.4 + 0.34 * g.height),
                 legend=[(team, ACCENT, "sq"), (opp, OTHER, "sq")])
     labels = [f"Q{int(r['qtr'])} {r['time']}  {r['penalty_type']}" for r in g.iter_rows(named=True)]
     lw = viz._label_col(card, labels, 9)
@@ -219,10 +202,7 @@ def gameplan_chart(cmp: pl.DataFrame, team: str, opp: str, path: Path, week: int
                      "ref": None if r["league"] is None else r["league"] * 100})
     if not rows:
         return path
-    big = max((r for r in rows if r["a"] is not None and r["label"] != "Success rate"), key=lambda r: abs(r["b"] - r["a"]), default=rows[0])
-    title = (f"Biggest gameplan shift: {big['label'].split(' (')[0].lower()} {big['b']:.0f}%, "
-             f"usually {big['a']:.0f}%"
-             if big.get("a") is not None else f"{team}'s gameplan vs {opp}")
+    title = f"{team} offense vs {opp}: this game vs usual vs league"
     spec = {"kind": "dumbbell", "rows": rows, "fmt": "{:.0f}%", "xlim": [0, 100], "xticks": [0, 25, 50, 75, 100],
             "names": [f"{team} usual (prior games)", "This game", "League"]}
     card = Card(title, "Giants offense, real run and pass plays only. FTN rates appear once FTN charts the game.",
